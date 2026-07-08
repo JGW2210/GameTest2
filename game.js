@@ -73,24 +73,83 @@ const isLegendaryMod = (d) => isPowered(d) || isWild(d);
 // an end can gain pips only if it is neither powered nor wild
 const canPipEnd = (d, end) => d[end] < 9 && d[end + 'Op'] !== 'pow' && !d[end + 'Wild'];
 
-/* ---------------- seals ---------------- */
+/* ---------------- seals ----------------
+   Reworked for clarity: two simple commons (money, tempo), two uncommons
+   (retrigger, recursion) and one rare build-maker. Seals are won from Seal
+   Packs, which guarantee a choice — no more fishing a wheel. */
 const SEALS = {
-  ruby: { icon: '🔴', name: 'Ruby Seal', price: 6,
-    desc: 'Every joint it touches retriggers — the joint\'s base value scores again.' },
-  gold: { icon: '🟡', name: 'Gold Seal', price: 5,
+  gold: { icon: '🟡', name: 'Gold Seal', rarity: 'common',
     desc: 'Pays $2 every time it is played in a chain.' },
-  azure: { icon: '🔵', name: 'Azure Seal', price: 7,
+  amber: { icon: '🟠', name: 'Amber Seal', rarity: 'common',
+    desc: 'Guaranteed in your opening hand every round, and +8 chain score when played.' },
+  ruby: { icon: '🔴', name: 'Ruby Seal', rarity: 'uncommon',
+    desc: 'Every joint it touches retriggers — the joint\'s base value scores again.' },
+  azure: { icon: '🔵', name: 'Azure Seal', rarity: 'uncommon',
     desc: 'Returns to your hand after the chain scores instead of being consumed.' },
-  amber: { icon: '🟠', name: 'Amber Seal', price: 4,
-    desc: 'Guaranteed to be in your opening hand every round.' },
+  obsidian: { icon: '🖤', name: 'Obsidian Seal', rarity: 'rare',
+    desc: 'BIDMAS breaker: the + between this domino\'s two sides becomes ×, so its neighbouring terms multiply together. Only found in big Seal Packs.' },
 };
-function startingPouch() {
-  const pouch = [];
+
+/* ---------------- pouches & stakes (the "Decks" and "Stakes") ---------------- */
+const POUCHES = [
+  { id: 'standard', icon: '👝', name: 'Standard', unlock: 0,
+    desc: 'The classic double-six set plus two bonus bones.' },
+  { id: 'gilded', icon: '🪙', name: 'Gilded', unlock: 4, startMoney: 4, goalMult: 1.1,
+    desc: 'Two bones start gold and you begin with +$4 — but goals are 10% higher.' },
+  { id: 'cracked', icon: '🦴', name: 'Cracked', unlock: 6, discardDelta: -1,
+    desc: 'Only 24 bones — thin and consistent — but one fewer discard per round.' },
+  { id: 'cursed', icon: '💀', name: 'Cursed', unlock: 8, startMoney: 8,
+    desc: 'Four cursed bones lurk inside; you begin with +$8. Absolute or Grave Robber tame it.' },
+  { id: 'crystal', icon: '💎', name: 'Crystal', unlock: 10, shatter: 0.5,
+    desc: 'Three bones start crystal — but crystals shatter half the time.' },
+];
+const STAKES = [
+  { id: 'white', icon: '⚪', name: 'White Bone', goalMult: 1,
+    desc: 'The standard challenge.' },
+  { id: 'bronze', icon: '🟤', name: 'Bronze', goalMult: 1.2,
+    desc: 'Goals +20%.' },
+  { id: 'silver', icon: '🥈', name: 'Silver', goalMult: 1.4, basePay: 3,
+    desc: 'Goals +40% and round payout drops to $3.' },
+  { id: 'gold', icon: '🥇', name: 'Gold', goalMult: 1.6, basePay: 3, interestDelta: -2,
+    desc: 'Goals +60%, payout $3, interest cap −$2.' },
+];
+
+function loadProgress() {
+  try { return JSON.parse(localStorage.getItem('chainbone-progress') || '{}'); }
+  catch { return {}; }
+}
+function saveProgress(p) { localStorage.setItem('chainbone-progress', JSON.stringify(p)); }
+function recordRoundCleared(round) {
+  const p = loadProgress();
+  p.bestRound = Math.max(p.bestRound || 0, round);
+  p.best = p.best || {};
+  p.best[S.stake.id] = Math.max(p.best[S.stake.id] || 0, round);
+  saveProgress(p);
+}
+// pouches unlock off your best round anywhere; each stake unlocks by
+// clearing round 8 on the stake before it
+function pouchUnlocked(p) { return (loadProgress().bestRound || 0) >= (p.unlock || 0); }
+function stakeUnlocked(idx) {
+  if (idx === 0) return true;
+  return ((loadProgress().best || {})[STAKES[idx - 1].id] || 0) >= 8;
+}
+
+function startingPouch(pouchDef) {
+  let pouch = [];
   for (let a = 0; a <= 6; a++)
     for (let b = a; b <= 6; b++) pouch.push(makeDomino(a, b)); // 28: full double-six set
   // two bonus bones to reach 30
   pouch.push(makeDomino(1 + rand(6), 1 + rand(6)));
   pouch.push(makeDomino(1 + rand(6), 1 + rand(6)));
+  if (pouchDef.id === 'gilded') shuffle(pouch).slice(0, 2).forEach((d) => { d.material = 'gold'; });
+  if (pouchDef.id === 'crystal') shuffle(pouch).slice(0, 3).forEach((d) => { d.material = 'crystal'; });
+  if (pouchDef.id === 'cracked') pouch = shuffle(pouch).slice(0, 24);
+  if (pouchDef.id === 'cursed') {
+    shuffle(pouch).slice(0, 4).forEach((d) => {
+      d.a = -(1 + rand(9));
+      if (rand(2)) d.b = -(1 + rand(9));
+    });
+  }
   return pouch;
 }
 // effective end values/ops of a chain entry, respecting its flip
@@ -136,7 +195,7 @@ const CHARMS = [
   { id: 'center', icon: '🎪', name: 'Centerpiece', rarity: 'rare', price: 8,
     desc: 'The second joint of every chain scores ×2.' },
   { id: 'ouro', icon: '♾️', name: 'Ouroboros', rarity: 'legendary', price: 15,
-    desc: 'The chain bites its tail: the two exposed ends are also multiplied together and added as a phantom joint.' },
+    desc: 'The chain bites its tail: the exposed ends form a TRUE joint — power ends fire (a^b), and crystal, Twin Flame and the pip charms all apply to it.' },
   { id: 'abs', icon: '🧿', name: 'Absolute', rarity: 'rare', price: 8,
     desc: 'Every end and joint scores its absolute value — cursed bones turn holy.' },
   { id: 'keystone', icon: '🗿', name: 'Keystone', rarity: 'legendary', price: 16,
@@ -204,7 +263,7 @@ const CHARMS = [
   { id: 'echo', icon: '📢', name: 'Echo Chamber', rarity: 'legendary', price: 15,
     desc: 'Every joint retriggers — its base value scores again.' },
   { id: 'house', icon: '🎰', name: 'House Edge', rarity: 'legendary', price: 15,
-    desc: 'The Wheels of Fortune always land on their jackpot.' },
+    desc: 'Packs offer one extra choice, and the Royal Wheel always lands its jackpot.' },
 ];
 const MAX_CHARMS = 5;
 const has = (id) => S.charms.some((c) => c.id === id);
@@ -241,16 +300,20 @@ const BOSSES = [
 /* ---------------- game state ---------------- */
 let S = null;
 
-function newRun() {
+function newRun(pouchId = 'standard', stakeId = 'white') {
+  const pouchDef = POUCHES.find((p) => p.id === pouchId) || POUCHES[0];
+  const stake = STAKES.find((s) => s.id === stakeId) || STAKES[0];
   S = {
+    pouchDef, stake,
     round: 0,
-    money: 4,
-    pouch: startingPouch(),
+    money: 4 + (pouchDef.startMoney || 0),
+    pouch: startingPouch(pouchDef),
+    shatterChance: pouchDef.shatter || 0.25,
     charms: [],
     chainSize: 4,
     handSize: 7,
     playsMax: 3,
-    discardsMax: 3,
+    discardsMax: 3 + (pouchDef.discardDelta || 0),
     interestCap: 5,
     bestChain: 0,
     // per-round
@@ -265,6 +328,8 @@ function newRun() {
 
 function goalFor(round, boss) {
   let g = 60 * Math.pow(1.35, round - 1);
+  g *= (S.stake && S.stake.goalMult) || 1;
+  g *= (S.pouchDef && S.pouchDef.goalMult) || 1;
   if (boss && boss.id === 'tithe') g *= 1.25;
   return Math.round(g / 5) * 5;
 }
@@ -351,11 +416,15 @@ function scoreChain(entries, opts = {}) {
   res.forEach((e) => { seq.push(e.l, e.r); });
   const jointBases = [];
 
+  // terms[k] and terms[k+1] are bridged by domino k: normally +, but an
+  // obsidian seal on that domino turns its internal + into × (BIDMAS!)
+  const terms = [];
+
   // --- exposed left end ---
   let endL = firstVal;
   exprParts.push(exprNum(rawFirst));
   if (has('bookends')) { lines.push({ label: '📚 Bookends: left end ×4', amt: endL * 3 }); endL *= 4; }
-  total += endL;
+  terms.push(endL);
 
   // --- joints ---
   for (let i = 0; i < n - 1; i++) {
@@ -395,21 +464,52 @@ function scoreChain(entries, opts = {}) {
     if (has('echo')) { lines.push({ label: '📢 Echo Chamber: joint retriggered', amt: base }); v += base; }
     jointBases.push(base);
     jointVals.push(v);
-    total += v;
+    terms.push(v);
   }
 
   // --- exposed right end ---
   let endR = lastVal;
   exprParts.push(exprNum(rawLast));
   if (has('bookends')) { lines.push({ label: '📚 Bookends: right end ×4', amt: endR * 3 }); endR *= 4; }
-  total += endR;
+  terms.push(endR);
+
+  // --- BIDMAS assembly: multiply through obsidian bridges, then sum ---
+  let assembled = 0;
+  let run = terms[0];
+  let anyObsidian = false;
+  for (let k = 1; k < terms.length; k++) {
+    if (entries[k - 1].d.seal === 'obsidian') { run *= terms[k]; anyObsidian = true; }
+    else { assembled += run; run = terms[k]; }
+  }
+  assembled += run;
+  if (anyObsidian) {
+    const plainSum = terms.reduce((s, t) => s + t, 0);
+    lines.push({ label: '🖤 Obsidian Seal: neighbouring terms multiplied', amt: assembled - plainSum });
+  }
+  total = assembled;
 
   // --- chain-level effects ---
   if (has('ouro')) {
-    const phantom = firstVal * lastVal;
-    lines.push({ label: '♾️ Ouroboros: phantom joint (ends multiplied)', amt: phantom });
-    total += phantom;
+    // the chain bites its tail: the exposed ends form a TRUE joint — power
+    // ends fire (a^b), and joint charms + crystal apply to it
+    const loopPow = E[0].lOp === 'pow' || E[n - 1].rOp === 'pow';
+    let ph = loopPow ? Math.pow(firstVal, lastVal) : firstVal * lastVal;
+    const phBase = ph;
+    let phCrystals = 0;
+    if (entries[0].d.material === 'crystal') phCrystals++;
+    if (entries[n - 1].d.material === 'crystal') phCrystals++;
+    if (phCrystals) ph *= Math.pow(2, phCrystals);
+    if (has('twin') && firstVal === lastVal) ph *= 2;
+    if (has('deuce') && (firstVal === 2 || lastVal === 2)) ph *= 2;
+    if (has('seven') && (firstVal === 7 || lastVal === 7)) ph *= 2;
+    if (has('sixth') && (firstVal === 6 || lastVal === 6)) ph += 10;
+    if (has('echo')) ph += phBase;
+    lines.push({ label: `♾️ Ouroboros: tail-bite joint ${exprNum(firstVal)}${loopPow ? '^' : '×'}${exprNum(lastVal)}`, amt: ph });
+    jointVals.push(ph); // eligible for High Roller
+    total += ph;
   }
+  const ambers = entries.filter((e) => e.d.seal === 'amber').length;
+  if (ambers) { lines.push({ label: `🟠 Amber Seal ×${ambers}`, amt: 8 * ambers }); total += 8 * ambers; }
   if (has('survey')) { lines.push({ label: '📏 Surveyor', amt: 5 * n }); total += 5 * n; }
   if (has('high') && jointVals.length) {
     const best = Math.max(...jointVals);
@@ -472,7 +572,7 @@ function scoreChain(entries, opts = {}) {
     if (e.d.material === 'gold') money++;
     if (e.d.seal === 'gold') money += 2;
     if (has('digger') && e.d.a === e.d.b) money++;
-    if (e.d.material === 'crystal' && !has('ball') && Math.random() < 0.25) {
+    if (e.d.material === 'crystal' && !has('ball') && Math.random() < (S.shatterChance || 0.25)) {
       shattered.push(e.d);
       if (has('scrap')) money += 5; // ♻️ Scrapper
     }
@@ -480,7 +580,11 @@ function scoreChain(entries, opts = {}) {
   if (has('bell') && total >= 100) money += 2;                     // 🔔 Encore Bell
   if (has('grave')) money += seq.filter((v) => v < 0).length;      // 🪦 Grave Robber
 
-  return { total, expr: exprParts.join(' + '), lines, money, shattered };
+  // the printed expression reflects obsidian bridges: 1 + 2×3 × 4×5 + 6
+  const expr = exprParts
+    .map((p, k) => (k === 0 ? p : (entries[k - 1].d.seal === 'obsidian' ? ' × ' : ' + ') + p))
+    .join('');
+  return { total, expr, lines, money, shattered };
 }
 
 /* =====================================================================
@@ -846,16 +950,18 @@ function applySkipOffer() {
 }
 
 function winRound() {
-  const base = 4;
+  recordRoundCleared(S.round);
+  const base = (S.stake && S.stake.basePay) || 4;
   const playBonus = S.playsLeft;
   const perDollar = has('trust') ? 4 : 5; // 🏦 Trust Fund
-  const interest = Math.min(S.interestCap, Math.floor(S.money / perDollar));
+  const capEff = Math.max(1, S.interestCap + ((S.stake && S.stake.interestDelta) || 0));
+  const interest = Math.min(capEff, Math.floor(S.money / perDollar));
   const piggy = has('piggy') ? S.discardsLeft : 0;
   const bounty = S.boss ? 4 : 0;
   const rows = [
     ['Round cleared', `$${base}`],
     [`Unused plays ×${playBonus}`, `$${playBonus}`],
-    [`Interest ($1 per $${perDollar}, cap $${S.interestCap})`, `$${interest}`],
+    [`Interest ($1 per $${perDollar}, cap $${capEff})`, `$${interest}`],
   ];
   if (piggy) rows.push([`🐷 Piggy Bank: unused discards ×${S.discardsLeft}`, `$${piggy}`]);
   if (bounty) rows.push(['👑 Boss bounty', `$${bounty}`]);
@@ -879,11 +985,10 @@ function winRound() {
 }
 
 function gameOver(reason) {
-  const best = Number(localStorage.getItem('chainbone-best') || 0);
-  if (S.round > best) localStorage.setItem('chainbone-best', String(S.round));
   $('go-stats').innerHTML = `
     <div>${reason}</div>
-    <div>Reached round <strong>${S.round}</strong></div>
+    <div>${S.pouchDef.icon} ${S.pouchDef.name} Pouch · ${S.stake.icon} ${S.stake.name} Stake</div>
+    <div>Reached round <strong>${S.round}</strong> · best cleared anywhere: <strong>${loadProgress().bestRound || 0}</strong></div>
     <div>Best single chain: <strong>${fmt(S.bestChain)}</strong></div>
     <div>Pouch size: <strong>${S.pouch.length}</strong> · Charms: <strong>${S.charms.length}</strong></div>`;
   $('overlay-gameover').classList.remove('hidden');
@@ -936,6 +1041,7 @@ function generateShop() {
     voucher: voucherPool.length ? { v: voucherPool[0], sold: false } : null,
     royal: Math.random() < 0.25, // the legendary wheel is only sometimes wheeled in
     spun: {},                    // wheelId -> true once spun this shop
+    packs: [randPack(), randPack()], // two pack slots, repeats possible
     services: { pip: false, cull: false }, // targeted workbench sold flags
   };
 }
@@ -1006,32 +1112,6 @@ function wheelCrystallize() {
     renderShop();
   });
 }
-function wheelSeal() {
-  const color = pick(Object.keys(SEALS));
-  const sd = SEALS[color];
-  if (!S.pouch.some((d) => !d.seal && !isLegendaryMod(d))) return housePays(4);
-  pickDomino(`Prize: ${sd.icon} ${sd.name}`, sd.desc, (d) => !d.seal && !isLegendaryMod(d), (d) => {
-    d.seal = color;
-    toast(`(${d.a}|${d.b}) sealed!`);
-    renderShop();
-  });
-}
-function wheelBonePack() {
-  const pack = [randomShopDomino().d, randomShopDomino().d, randomShopDomino().d];
-  pickDomino('Prize: Bone Pack — keep one', 'The other two are lost', () => true, (d) => {
-    S.pouch.push(d);
-    toast(`(${d.a}|${d.b}) joins your pouch`);
-    renderShop();
-  }, pack);
-}
-function wheelCursedGift() {
-  const a = -(1 + rand(9));
-  const b = rand(2) ? 1 + rand(9) : -(1 + rand(9));
-  S.pouch.push(makeDomino(a, b));
-  S.money += 3;
-  toast(`💀 A cursed (${a}|${b}) sneaks into your pouch (+$3 pity)`);
-  renderShop();
-}
 function wheelPowerBrush() {
   if (!S.pouch.some((d) => !isLegendaryMod(d))) return housePays(6);
   pickEnd('JACKPOT: Power Brush — tap the end to empower', (d) => !isLegendaryMod(d), (d, end) => {
@@ -1048,41 +1128,14 @@ function wheelChamBrush() {
     renderShop();
   });
 }
-function wheelBrushRandom() { (rand(2) ? wheelPowerBrush : wheelChamBrush)(); }
 function wheelCharm(rarity, refund) {
   if (!grantCharmOfRarity(rarity)) return housePays(refund);
   renderShop();
 }
 
 const WHEELS = [
-  { id: 'tinker', icon: '🔨', name: 'Tinker Wheel', price: 3,
-    desc: 'Everyday pouch work — pips, culls, copies… and a golden jackpot.',
-    outcomes: [
-      { icon: '🔨', label: 'Pip Up: +1/+1 to a chosen domino', w: 35, run: wheelPipUp },
-      { icon: '🔧', label: 'Precision Pip: +1 to a chosen end', w: 25, run: wheelPrecision },
-      { icon: '🗑️', label: 'Cull: remove a chosen domino', w: 15, run: wheelCull },
-      { icon: '🪞', label: 'Duplicate: copy 1 of 10 random', w: 15, run: wheelDuplicate },
-      { icon: '✨', label: 'JACKPOT — gild a chosen domino', w: 10, run: wheelGild },
-    ], jackpot: 4 },
-  { id: 'mystic', icon: '🔮', name: 'Mystic Wheel', price: 6,
-    desc: 'Seals, materials and stranger things.',
-    outcomes: [
-      { icon: '🔴', label: 'A random seal on a chosen domino', w: 45, run: wheelSeal },
-      { icon: '💎', label: 'Crystallize a chosen domino', w: 20, run: wheelCrystallize },
-      { icon: '🎁', label: 'Bone Pack: 3 bones, keep 1', w: 20, run: wheelBonePack },
-      { icon: '💀', label: 'A cursed bone sneaks in (+$3 pity)', w: 10, run: wheelCursedGift },
-      { icon: '⚡', label: 'JACKPOT — a legendary brush', w: 5, run: wheelBrushRandom },
-    ], jackpot: 4 },
-  { id: 'arcana', icon: '🎴', name: 'Arcana Wheel', price: 8,
-    desc: 'Charms of shifting rarity.',
-    outcomes: [
-      { icon: '⚪', label: 'A random common charm', w: 55, run: () => wheelCharm('common', 4) },
-      { icon: '🟢', label: 'A random uncommon charm', w: 30, run: () => wheelCharm('uncommon', 5) },
-      { icon: '🟣', label: 'A random rare charm', w: 12, run: () => wheelCharm('rare', 6) },
-      { icon: '🌟', label: 'JACKPOT — a LEGENDARY charm', w: 3, run: () => wheelCharm('legendary', 8) },
-    ], jackpot: 3 },
   { id: 'royal', icon: '👑', name: 'Royal Wheel', price: 15, rarity: 'legendary',
-    desc: 'Legendary or bust. Rarely wheeled into the Bazaar.',
+    desc: 'Legendary or bust — the one true gamble left in the Bazaar. Rarely wheeled in.',
     outcomes: [
       { icon: '⚡', label: 'Power Brush: one end becomes ^', w: 30, run: wheelPowerBrush },
       { icon: '🦎', label: 'Chameleon Brush: one end goes wild', w: 30, run: wheelChamBrush },
@@ -1090,6 +1143,90 @@ const WHEELS = [
       { icon: '💸', label: 'Bust — the house pays $5', w: 25, run: () => housePays(5) },
     ], jackpot: 2 },
 ];
+
+/* ---------------- packs (Balatro-style: buy, peek, pick one) ----------------
+   The Tinker/Mystic/Arcana wheels are reborn as packs with real choice.
+   Each shop stocks TWO pack slots drawn from the three kinds (repeats
+   possible); each slot rolls small (3 options) or big (5 options, pricier). */
+const PACK_KINDS = {
+  tinker: { icon: '🔨', name: 'Tinker Pack', small: [4, 3], big: [6, 5],
+    desc: 'Workbench coupons — pick one job.' },
+  seal: { icon: '🏮', name: 'Seal Pack', small: [5, 3], big: [8, 5],
+    desc: 'Pick a seal, then the domino to carry it.' },
+  arcana: { icon: '🎴', name: 'Arcana Pack', small: [6, 3], big: [10, 5],
+    desc: 'Charms of shifting rarity — keep one.' },
+};
+const TINKER_COUPONS = [
+  { icon: '🔨', name: 'Pip Up', desc: '+1/+1 to a chosen domino', run: wheelPipUp },
+  { icon: '🔧', name: 'Precision Pip', desc: '+1 to one chosen end', run: wheelPrecision },
+  { icon: '🗑️', name: 'Cull', desc: 'Remove a chosen domino for good', run: wheelCull },
+  { icon: '🪞', name: 'Duplicate', desc: 'Copy 1 of 10 random dominoes', run: wheelDuplicate },
+  { icon: '✨', name: 'Gild', desc: 'Turn a chosen domino gold', run: wheelGild },
+  { icon: '💎', name: 'Crystallize', desc: 'Turn a chosen domino crystal', run: wheelCrystallize },
+];
+
+function randPack() {
+  const kind = pick(Object.keys(PACK_KINDS));
+  const size = Math.random() < 0.35 ? 'big' : 'small';
+  const [price, picks] = PACK_KINDS[kind][size];
+  return { kind, size, price, picks, opened: false };
+}
+
+function applySeal(color) {
+  const sd = SEALS[color];
+  if (!S.pouch.some((d) => !d.seal && !isLegendaryMod(d))) return housePays(4);
+  pickDomino(`${sd.icon} ${sd.name}: choose a domino`, sd.desc,
+    (d) => !d.seal && !isLegendaryMod(d), (d) => {
+      d.seal = color;
+      toast(`(${d.a}|${d.b}) sealed!`);
+      renderShop();
+    });
+}
+
+function openPack(slot) {
+  if (slot.opened) return;
+  const def = PACK_KINDS[slot.kind];
+  const picks = slot.picks + (has('house') ? 1 : 0); // 🎰 House Edge
+  let cards = [];
+  if (slot.kind === 'tinker') {
+    cards = shuffle(TINKER_COUPONS).slice(0, picks).map((c) => (
+      { icon: c.icon, name: c.name, desc: c.desc, onPick: c.run }));
+  } else if (slot.kind === 'seal') {
+    // obsidian, the rare build-maker, only ever appears in BIG seal packs
+    const pool = Object.keys(SEALS).filter((k) => slot.size === 'big' || k !== 'obsidian');
+    cards = shuffle(pool).slice(0, picks).map((k) => (
+      { icon: SEALS[k].icon, name: SEALS[k].name, desc: SEALS[k].desc, rarity: SEALS[k].rarity,
+        onPick: () => applySeal(k) }));
+  } else {
+    const pool = CHARMS.filter((c) => !S.charms.some((x) => x.id === c.id));
+    cards = weightedCharms(pool, picks).map((c) => (
+      { icon: c.icon, name: c.name, desc: c.desc, rarity: c.rarity,
+        onPick: () => {
+          if (S.charms.length >= MAX_CHARMS) { toast('Charm shelf is full'); return; }
+          S.charms.push(c);
+          toast(`${c.icon} ${c.name} joins your shelf!`);
+          renderShop();
+        } }));
+    if (!cards.length) { toast('No charms left to offer'); return; }
+  }
+  if (!spend(slot.price)) return;
+  slot.opened = true;
+  renderShop();
+  openCardPicker(`${def.icon} ${def.name}`, 'Choose one — walking away forfeits the pack', cards);
+}
+
+function openCardPicker(title, sub, cards) {
+  openPicker(title, sub);
+  const grid = $('picker-grid');
+  cards.forEach((c) => {
+    const el = document.createElement('div');
+    el.className = 'charm-card';
+    el.innerHTML = `${c.rarity ? `<span class="si-rarity ${c.rarity}">${c.rarity}</span>` : ''}`
+      + `<span class="cc-name">${c.icon} ${c.name}</span><span class="cc-desc">${c.desc}</span>`;
+    el.onclick = () => { closePicker(); c.onPick(); };
+    grid.appendChild(el);
+  });
+}
 
 function spinWheel(wheel) {
   if (S.shop.spun[wheel.id]) return;
@@ -1271,17 +1408,29 @@ function renderShop() {
     });
   });
 
-  // --- wheels of fortune ---
-  const wheelRow = section('Wheels of Fortune — pay to spin, the wheel picks the prize');
-  WHEELS.forEach((w) => {
-    if (w.id === 'royal' && !S.shop.royal) return;
-    item(wheelRow, {
+  // --- packs ---
+  const packRow = section('Packs — buy, peek, pick one');
+  S.shop.packs.forEach((slot) => {
+    const def = PACK_KINDS[slot.kind];
+    item(packRow, {
+      name: `${def.icon} ${def.name}${slot.size === 'big' ? ' — BIG' : ''}`,
+      desc: `${def.desc} ${slot.picks + (has('house') ? 1 : 0)} options, keep one.`,
+      price: slot.price, sold: slot.opened,
+      rarity: slot.size === 'big' ? 'uncommon' : undefined,
+      disabled: slot.kind === 'arcana' && S.charms.length >= MAX_CHARMS,
+      btnLabel: `Open $${slot.price}`,
+      onBuy: () => openPack(slot),
+    });
+  });
+  if (S.shop.royal) {
+    const w = WHEELS[0];
+    item(packRow, {
       name: `${w.icon} ${w.name}`, desc: w.desc, price: w.price,
-      rarity: w.rarity, sold: !!S.shop.spun[w.id],
+      rarity: 'legendary', sold: !!S.shop.spun[w.id],
       btnLabel: `Spin $${w.price}`,
       onBuy: () => spinWheel(w),
     });
-  });
+  }
 
   // --- workbench: the only two targeted services left ---
   const svcRow = section('Workbench');
@@ -1398,9 +1547,54 @@ function openPouch() {
 /* =====================================================================
    WIRING
    ===================================================================== */
+let selPouch = localStorage.getItem('chainbone-pouch') || 'standard';
+let selStake = localStorage.getItem('chainbone-stake') || 'white';
+
+function renderMenuSelectors() {
+  // fall back to defaults if a previously-picked option is no longer unlocked
+  const sp = POUCHES.find((p) => p.id === selPouch);
+  if (!sp || !pouchUnlocked(sp)) selPouch = 'standard';
+  const si = STAKES.findIndex((s) => s.id === selStake);
+  if (si < 0 || !stakeUnlocked(si)) selStake = 'white';
+
+  const pr = $('pouch-row');
+  pr.innerHTML = '';
+  POUCHES.forEach((p) => {
+    const unlocked = pouchUnlocked(p);
+    const el = document.createElement('button');
+    el.className = 'select-chip' + (selPouch === p.id ? ' sel' : '') + (unlocked ? '' : ' locked');
+    el.innerHTML = `<span class="chip-icon">${unlocked ? p.icon : '🔒'}</span><span>${p.name}</span>`;
+    el.onclick = () => {
+      if (!unlocked) { toast(`🔒 Clear round ${p.unlock} on any run to unlock the ${p.name} Pouch`); return; }
+      selPouch = p.id;
+      localStorage.setItem('chainbone-pouch', p.id);
+      renderMenuSelectors();
+    };
+    pr.appendChild(el);
+  });
+  const sr = $('stake-row');
+  sr.innerHTML = '';
+  STAKES.forEach((s, i) => {
+    const unlocked = stakeUnlocked(i);
+    const el = document.createElement('button');
+    el.className = 'select-chip' + (selStake === s.id ? ' sel' : '') + (unlocked ? '' : ' locked');
+    el.innerHTML = `<span class="chip-icon">${unlocked ? s.icon : '🔒'}</span><span>${s.name}</span>`;
+    el.onclick = () => {
+      if (!unlocked) { toast(`🔒 Clear round 8 on ${STAKES[i - 1].name} to unlock the ${s.name} Stake`); return; }
+      selStake = s.id;
+      localStorage.setItem('chainbone-stake', s.id);
+      renderMenuSelectors();
+    };
+    sr.appendChild(el);
+  });
+  const pd = POUCHES.find((p) => p.id === selPouch);
+  const sd = STAKES.find((s) => s.id === selStake);
+  $('menu-desc').textContent = `${pd.desc} · ${sd.desc}`;
+}
+
 function bind() {
-  $('btn-new-run').onclick = newRun;
-  $('btn-restart').onclick = () => { $('overlay-gameover').classList.add('hidden'); newRun(); };
+  $('btn-new-run').onclick = () => newRun(selPouch, selStake);
+  $('btn-restart').onclick = () => { $('overlay-gameover').classList.add('hidden'); newRun(selPouch, selStake); };
   $('btn-to-menu').onclick = () => { $('overlay-gameover').classList.add('hidden'); showMenu(); };
 
   $('btn-play').onclick = playChain;
@@ -1429,8 +1623,9 @@ function bind() {
 }
 
 function showMenu() {
-  const best = Number(localStorage.getItem('chainbone-best') || 0);
-  $('best-round').textContent = best > 0 ? `Best run: round ${best}` : '';
+  const best = loadProgress().bestRound || 0;
+  $('best-round').textContent = best > 0 ? `Best round cleared: ${best}` : '';
+  renderMenuSelectors();
   showScreen('menu');
 }
 
@@ -1438,4 +1633,7 @@ bind();
 showMenu();
 
 // debug/testing hook (harmless in production)
-window.__CB = { getState: () => S, scoreChain, makeDomino, startRound, render, CHARMS };
+window.__CB = {
+  getState: () => S, scoreChain, makeDomino, startRound, render, newRun, renderShop,
+  CHARMS, POUCHES, STAKES, PACK_KINDS, SEALS,
+};
