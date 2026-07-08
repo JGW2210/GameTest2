@@ -141,6 +141,70 @@ const CHARMS = [
     desc: 'Every end and joint scores its absolute value — cursed bones turn holy.' },
   { id: 'keystone', icon: '🗿', name: 'Keystone', rarity: 'legendary', price: 16,
     desc: '+1 chain slot while this sits on your shelf.' },
+
+  // --- the pip family: one charm per number, rarer at the top ---
+  { id: 'aces', icon: '🅰️', name: 'Ace High', rarity: 'uncommon', price: 6,
+    desc: 'Scored 1s count as 10s.' },
+  { id: 'deuce', icon: '✌️', name: 'Deuce Deuce', rarity: 'uncommon', price: 6,
+    desc: 'Joints touching a 2 score ×2.' },
+  { id: 'third', icon: '3️⃣', name: 'Third Degree', rarity: 'common', price: 4,
+    desc: '+15 for every 3 scored.' },
+  { id: 'four', icon: '4️⃣', name: 'Foursquare', rarity: 'uncommon', price: 5,
+    desc: 'Scored 4s count as 8s.' },
+  { id: 'five', icon: '🖐️', name: 'High Five', rarity: 'uncommon', price: 6,
+    desc: '+25 for every joint whose result is a multiple of 5.' },
+  { id: 'seven', icon: '7️⃣', name: 'Lucky Seven', rarity: 'rare', price: 8,
+    desc: 'Joints touching a 7 score ×2.' },
+  { id: 'eight', icon: '🎱', name: 'Crazy Eights', rarity: 'rare', price: 8,
+    desc: '+28 for every 8 scored.' },
+  { id: 'nine', icon: '☁️', name: 'Cloud Nine', rarity: 'rare', price: 8,
+    desc: 'Exposed ends showing 9 count as 99.' },
+
+  // --- post-scoring conditionals: effects that trigger after the chain lands ---
+  { id: 'bell', icon: '🔔', name: 'Encore Bell', rarity: 'uncommon', price: 5,
+    desc: 'Chains scoring 100 or more pay $2.' },
+  { id: 'phoenix', icon: '🪽', name: 'Phoenix Feather', rarity: 'rare', price: 8,
+    desc: 'Once per round, a chain scoring under 20 refunds its play.' },
+  { id: 'perfect', icon: '💠', name: 'Perfectionist', rarity: 'rare', price: 8,
+    desc: 'If every joint (2+) lands the same base value, the chain scores ×2.' },
+  { id: 'alch', icon: '⚗️', name: 'Alchemist', rarity: 'rare', price: 8,
+    desc: 'After a chain scores, 1-in-5 chance a played plain domino turns gold.' },
+  { id: 'collector', icon: '🧲', name: 'Collector', rarity: 'common', price: 4,
+    desc: 'Chains containing a double score +20.' },
+  { id: 'mirror', icon: '🪞', name: 'Mirror Mask', rarity: 'rare', price: 8,
+    desc: 'If the chain reads the same backwards, it scores ×2.' },
+
+  // --- flow & economy ---
+  { id: 'early', icon: '🐦', name: 'Early Bird', rarity: 'uncommon', price: 6,
+    desc: 'The first chain each round scores ×1.5.' },
+  { id: 'closer', icon: '🏁', name: 'The Closer', rarity: 'uncommon', price: 6,
+    desc: 'Chains played with your last play score ×1.5.' },
+  { id: 'countdown', icon: '⏬', name: 'Countdown', rarity: 'rare', price: 8,
+    desc: 'If pip values never increase left→right, the chain scores ×1.5.' },
+  { id: 'hook', icon: '🥊', name: 'Left Hook', rarity: 'common', price: 4,
+    desc: 'The first joint scores +15.' },
+  { id: 'anchor', icon: '⚓', name: 'Anchor', rarity: 'common', price: 4,
+    desc: 'The last joint scores +15.' },
+  { id: 'haggler', icon: '🤝', name: 'Haggler', rarity: 'uncommon', price: 6,
+    desc: 'Your first purchase in each shop costs $2 less.' },
+  { id: 'trust', icon: '🏦', name: 'Trust Fund', rarity: 'rare', price: 8,
+    desc: 'Interest pays $1 per $4 held instead of $5.' },
+  { id: 'scrap', icon: '♻️', name: 'Scrapper', rarity: 'common', price: 4,
+    desc: 'Shattered crystal dominoes pay $5.' },
+  { id: 'jeweler', icon: '💍', name: 'Jeweler', rarity: 'uncommon', price: 5,
+    desc: '+15 chain score for every gold domino played.' },
+  { id: 'sealk', icon: '🦭', name: 'Sealkeeper', rarity: 'uncommon', price: 5,
+    desc: '+12 chain score for every sealed domino played.' },
+  { id: 'grave', icon: '🪦', name: 'Grave Robber', rarity: 'uncommon', price: 5,
+    desc: 'Earn $1 for every negative pip scored.' },
+  { id: 'diver', icon: '🧤', name: 'Dumpster Diver', rarity: 'uncommon', price: 5,
+    desc: 'Chains score +10 for every discard used this round.' },
+
+  // --- new legendaries ---
+  { id: 'echo', icon: '📢', name: 'Echo Chamber', rarity: 'legendary', price: 15,
+    desc: 'Every joint retriggers — its base value scores again.' },
+  { id: 'house', icon: '🎰', name: 'House Edge', rarity: 'legendary', price: 15,
+    desc: 'The Wheels of Fortune always land on their jackpot.' },
 ];
 const MAX_CHARMS = 5;
 const has = (id) => S.charms.some((c) => c.id === id);
@@ -211,6 +275,9 @@ function startRound(round) {
   S.goal = goalFor(round, S.boss);
   S.playsLeft = S.boss && S.boss.id === 'heavy' ? 2 : S.playsMax;
   S.discardsLeft = S.discardsMax;
+  S.playsThisRound = 0;
+  S.discardsUsed = 0;
+  S.phoenixUsed = false;
   S.score = 0;
   S.chain = Array(effChainSize()).fill(null);
   S.drawPile = shuffle(S.pouch);
@@ -238,7 +305,10 @@ function refillHand() {
    power end (indices bind before multiplication — hence "rare").
    ===================================================================== */
 function effVal(v) {
-  return v === 0 && has('blank') ? 7 : v;
+  if (v === 0 && has('blank')) return 7;   // ⬜ Blank Slate
+  if (v === 1 && has('aces')) return 10;   // 🅰️ Ace High
+  if (v === 4 && has('four')) return 8;    // 4️⃣ Foursquare
+  return v;
 }
 function scoreChain(entries, opts = {}) {
   const n = entries.length;
@@ -269,10 +339,17 @@ function scoreChain(entries, opts = {}) {
     return v;
   };
 
-  const rawFirst = res[0].l;
-  const rawLast = res[n - 1].r;
+  let rawFirst = res[0].l;
+  let rawLast = res[n - 1].r;
+  if (has('nine') && rawFirst === 9) { lines.push({ label: '☁️ Cloud Nine: exposed 9 counts as 99', amt: 90 }); rawFirst = 99; }
+  if (has('nine') && rawLast === 9) { lines.push({ label: '☁️ Cloud Nine: exposed 9 counts as 99', amt: 90 }); rawLast = 99; }
   const firstVal = absify(rawFirst, 'left end');
   const lastVal = absify(rawLast, 'right end');
+
+  // every value the chain scores, in order — used by count/shape charms
+  const seq = [];
+  res.forEach((e) => { seq.push(e.l, e.r); });
+  const jointBases = [];
 
   // --- exposed left end ---
   let endL = firstVal;
@@ -301,15 +378,22 @@ function scoreChain(entries, opts = {}) {
     if (entries[i + 1].d.material === 'crystal') crystals++;
     if (crystals) { const m = Math.pow(2, crystals); lines.push({ label: `💎 Crystal joint ×${m}`, amt: v * (m - 1) }); v *= m; }
     if (has('twin') && a === b) { lines.push({ label: '🔥 Twin Flame: matching joint ×2', amt: v }); v *= 2; }
+    if (has('deuce') && (a === 2 || b === 2)) { lines.push({ label: '✌️ Deuce Deuce: joint ×2', amt: v }); v *= 2; }
+    if (has('seven') && (a === 7 || b === 7)) { lines.push({ label: '7️⃣ Lucky Seven: joint ×2', amt: v }); v *= 2; }
     if (has('center') && i === 1) { lines.push({ label: '🎪 Centerpiece: 2nd joint ×2', amt: v }); v *= 2; }
     if (has('even') && base % 2 === 0) { lines.push({ label: '⚖️ Even Steven', amt: 8 }); v += 8; }
     if (has('odd') && base % 2 === 1) { lines.push({ label: '🎭 Odd Rod', amt: 8 }); v += 8; }
+    if (has('five') && base !== 0 && base % 5 === 0) { lines.push({ label: '🖐️ High Five', amt: 25 }); v += 25; }
     if (has('sixth') && (a === 6 || b === 6)) { lines.push({ label: '🕕 Sixth Sense', amt: 10 }); v += 10; }
     if (has('momentum') && i > 0) { lines.push({ label: `🎢 Momentum (joint ${i + 1})`, amt: 4 * i }); v += 4 * i; }
-    // ruby seals retrigger the joint's base value once per sealed participant
+    if (has('hook') && i === 0) { lines.push({ label: '🥊 Left Hook', amt: 15 }); v += 15; }
+    if (has('anchor') && i === n - 2) { lines.push({ label: '⚓ Anchor', amt: 15 }); v += 15; }
+    // retriggers: ruby seals (per sealed participant) and Echo Chamber (all joints)
     [entries[i], entries[i + 1]].forEach((e) => {
       if (e.d.seal === 'ruby') { lines.push({ label: '🔴 Ruby Seal: joint retriggered', amt: base }); v += base; }
     });
+    if (has('echo')) { lines.push({ label: '📢 Echo Chamber: joint retriggered', amt: base }); v += base; }
+    jointBases.push(base);
     jointVals.push(v);
     total += v;
   }
@@ -333,14 +417,47 @@ function scoreChain(entries, opts = {}) {
     total += best;
   }
   if (has('mini') && n === 3) { lines.push({ label: '🪶 Minimalist', amt: 40 }); total += 40; }
-  if (has('snake')) {
-    const seq = [];
-    res.forEach((e) => { seq.push(e.l, e.r); });
-    if (seq.every((v, i) => i === 0 || seq[i - 1] <= v)) {
-      const bonus = total * 0.5;
-      lines.push({ label: '🐍 Snake Charmer: chain ×1.5', amt: bonus });
-      total += bonus;
-    }
+
+  // count charms: every scored value in seq participates
+  const threes = seq.filter((v) => v === 3).length;
+  if (has('third') && threes) { lines.push({ label: `3️⃣ Third Degree ×${threes}`, amt: 15 * threes }); total += 15 * threes; }
+  const eights = seq.filter((v) => v === 8).length;
+  if (has('eight') && eights) { lines.push({ label: `🎱 Crazy Eights ×${eights}`, amt: 28 * eights }); total += 28 * eights; }
+  if (has('collector') && entries.some((e) => e.d.a === e.d.b)) { lines.push({ label: '🧲 Collector: double in chain', amt: 20 }); total += 20; }
+  const goldCount = entries.filter((e) => e.d.material === 'gold').length;
+  if (has('jeweler') && goldCount) { lines.push({ label: `💍 Jeweler ×${goldCount}`, amt: 15 * goldCount }); total += 15 * goldCount; }
+  const sealedCount = entries.filter((e) => e.d.seal).length;
+  if (has('sealk') && sealedCount) { lines.push({ label: `🦭 Sealkeeper ×${sealedCount}`, amt: 12 * sealedCount }); total += 12 * sealedCount; }
+  if (has('diver') && (S.discardsUsed || 0) > 0) { lines.push({ label: `🧤 Dumpster Diver ×${S.discardsUsed}`, amt: 10 * S.discardsUsed }); total += 10 * S.discardsUsed; }
+
+  // shape & flow multipliers
+  if (has('snake') && seq.every((v, i) => i === 0 || seq[i - 1] <= v)) {
+    const bonus = total * 0.5;
+    lines.push({ label: '🐍 Snake Charmer: chain ×1.5', amt: bonus });
+    total += bonus;
+  }
+  if (has('countdown') && seq.every((v, i) => i === 0 || seq[i - 1] >= v)) {
+    const bonus = total * 0.5;
+    lines.push({ label: '⏬ Countdown: chain ×1.5', amt: bonus });
+    total += bonus;
+  }
+  if (has('mirror') && seq.length >= 4 && seq.join(',') === seq.slice().reverse().join(',')) {
+    lines.push({ label: '🪞 Mirror Mask: palindrome ×2', amt: total });
+    total *= 2;
+  }
+  if (has('perfect') && jointBases.length >= 2 && jointBases.every((v) => v === jointBases[0])) {
+    lines.push({ label: '💠 Perfectionist: all joints equal ×2', amt: total });
+    total *= 2;
+  }
+  if (has('early') && (S.playsThisRound || 0) === 0) {
+    const bonus = total * 0.5;
+    lines.push({ label: '🐦 Early Bird: first chain ×1.5', amt: bonus });
+    total += bonus;
+  }
+  if (has('closer') && S.playsLeft === 1) {
+    const bonus = total * 0.5;
+    lines.push({ label: '🏁 The Closer: last play ×1.5', amt: bonus });
+    total += bonus;
   }
   // rolled only when a chain is actually played, never in the preview
   if (has('dice') && opts.roll && Math.random() < 1 / 3) {
@@ -355,8 +472,13 @@ function scoreChain(entries, opts = {}) {
     if (e.d.material === 'gold') money++;
     if (e.d.seal === 'gold') money += 2;
     if (has('digger') && e.d.a === e.d.b) money++;
-    if (e.d.material === 'crystal' && !has('ball') && Math.random() < 0.25) shattered.push(e.d);
+    if (e.d.material === 'crystal' && !has('ball') && Math.random() < 0.25) {
+      shattered.push(e.d);
+      if (has('scrap')) money += 5; // ♻️ Scrapper
+    }
   });
+  if (has('bell') && total >= 100) money += 2;                     // 🔔 Encore Bell
+  if (has('grave')) money += seq.filter((v) => v < 0).length;      // 🪦 Grave Robber
 
   return { total, expr: exprParts.join(' + '), lines, money, shattered };
 }
@@ -607,6 +729,7 @@ function confirmDiscard() {
   if (S.discardSel.size === 0) return;
   S.hand = S.hand.filter((d) => !S.discardSel.has(d.id));
   S.discardsLeft--;
+  S.discardsUsed++;
   S.discardMode = false;
   S.discardSel.clear();
   refillHand();
@@ -619,12 +742,27 @@ function playChain() {
 
   const r = scoreChain(entries, { roll: true });
   S.playsLeft--;
+  S.playsThisRound++;
   S.score += r.total;
   S.bestChain = Math.max(S.bestChain, r.total);
   if (r.money > 0) { S.money += r.money; }
   r.shattered.forEach((d) => {
     S.pouch = S.pouch.filter((p) => p.id !== d.id);
   });
+  // post-scoring conditionals
+  if (has('phoenix') && !S.phoenixUsed && r.total < 20) {
+    S.phoenixUsed = true;
+    S.playsLeft++;
+    toast('🪽 Phoenix Feather refunds the play');
+  }
+  if (has('alch') && Math.random() < 0.2) {
+    const cands = entries.map((e) => e.d).filter((d) => d.material === 'plain' && !r.shattered.includes(d));
+    if (cands.length) {
+      const d = pick(cands);
+      d.material = 'gold';
+      toast(`⚗️ Alchemist transmutes (${d.a}|${d.b}) to gold!`);
+    }
+  }
 
   // consume played dominoes for the round — but azure-sealed ones come home
   entries.forEach((e) => {
@@ -710,13 +848,14 @@ function applySkipOffer() {
 function winRound() {
   const base = 4;
   const playBonus = S.playsLeft;
-  const interest = Math.min(S.interestCap, Math.floor(S.money / 5));
+  const perDollar = has('trust') ? 4 : 5; // 🏦 Trust Fund
+  const interest = Math.min(S.interestCap, Math.floor(S.money / perDollar));
   const piggy = has('piggy') ? S.discardsLeft : 0;
   const bounty = S.boss ? 4 : 0;
   const rows = [
     ['Round cleared', `$${base}`],
     [`Unused plays ×${playBonus}`, `$${playBonus}`],
-    [`Interest ($1 per $5, cap $${S.interestCap})`, `$${interest}`],
+    [`Interest ($1 per $${perDollar}, cap $${S.interestCap})`, `$${interest}`],
   ];
   if (piggy) rows.push([`🐷 Piggy Bank: unused discards ×${S.discardsLeft}`, `$${piggy}`]);
   if (bounty) rows.push(['👑 Boss bounty', `$${bounty}`]);
@@ -924,7 +1063,7 @@ const WHEELS = [
       { icon: '🗑️', label: 'Cull: remove a chosen domino', w: 15, run: wheelCull },
       { icon: '🪞', label: 'Duplicate: copy 1 of 10 random', w: 15, run: wheelDuplicate },
       { icon: '✨', label: 'JACKPOT — gild a chosen domino', w: 10, run: wheelGild },
-    ] },
+    ], jackpot: 4 },
   { id: 'mystic', icon: '🔮', name: 'Mystic Wheel', price: 6,
     desc: 'Seals, materials and stranger things.',
     outcomes: [
@@ -933,7 +1072,7 @@ const WHEELS = [
       { icon: '🎁', label: 'Bone Pack: 3 bones, keep 1', w: 20, run: wheelBonePack },
       { icon: '💀', label: 'A cursed bone sneaks in (+$3 pity)', w: 10, run: wheelCursedGift },
       { icon: '⚡', label: 'JACKPOT — a legendary brush', w: 5, run: wheelBrushRandom },
-    ] },
+    ], jackpot: 4 },
   { id: 'arcana', icon: '🎴', name: 'Arcana Wheel', price: 8,
     desc: 'Charms of shifting rarity.',
     outcomes: [
@@ -941,7 +1080,7 @@ const WHEELS = [
       { icon: '🟢', label: 'A random uncommon charm', w: 30, run: () => wheelCharm('uncommon', 5) },
       { icon: '🟣', label: 'A random rare charm', w: 12, run: () => wheelCharm('rare', 6) },
       { icon: '🌟', label: 'JACKPOT — a LEGENDARY charm', w: 3, run: () => wheelCharm('legendary', 8) },
-    ] },
+    ], jackpot: 3 },
   { id: 'royal', icon: '👑', name: 'Royal Wheel', price: 15, rarity: 'legendary',
     desc: 'Legendary or bust. Rarely wheeled into the Bazaar.',
     outcomes: [
@@ -949,19 +1088,24 @@ const WHEELS = [
       { icon: '🦎', label: 'Chameleon Brush: one end goes wild', w: 30, run: wheelChamBrush },
       { icon: '🌟', label: 'A random LEGENDARY charm', w: 15, run: () => wheelCharm('legendary', 10) },
       { icon: '💸', label: 'Bust — the house pays $5', w: 25, run: () => housePays(5) },
-    ] },
+    ], jackpot: 2 },
 ];
 
 function spinWheel(wheel) {
   if (S.shop.spun[wheel.id]) return;
   if (!spend(wheel.price)) return;
   S.shop.spun[wheel.id] = true;
-  const totalW = wheel.outcomes.reduce((s, o) => s + o.w, 0);
-  let r = Math.random() * totalW;
-  let idx = 0;
-  for (; idx < wheel.outcomes.length - 1; idx++) {
-    r -= wheel.outcomes[idx].w;
-    if (r <= 0) break;
+  let idx;
+  if (has('house')) {
+    idx = wheel.jackpot; // 🎰 House Edge: rigged in your favour
+  } else {
+    const totalW = wheel.outcomes.reduce((s, o) => s + o.w, 0);
+    let r = Math.random() * totalW;
+    idx = 0;
+    for (; idx < wheel.outcomes.length - 1; idx++) {
+      r -= wheel.outcomes[idx].w;
+      if (r <= 0) break;
+    }
   }
   renderShop();
   openWheelModal(wheel, idx);
@@ -1015,6 +1159,15 @@ function openShop() {
 }
 
 function spend(cost) {
+  // 🤝 Haggler: first purchase in each shop is $2 cheaper
+  if (has('haggler') && S.shop && !S.shop.haggled && cost > 1) {
+    const discounted = Math.max(1, cost - 2);
+    if (S.money < discounted) { toast('Not enough money'); return false; }
+    S.shop.haggled = true;
+    S.money -= discounted;
+    toast('🤝 Haggler talks them down $2');
+    return true;
+  }
   if (S.money < cost) { toast('Not enough money'); return false; }
   S.money -= cost;
   return true;
@@ -1285,4 +1438,4 @@ bind();
 showMenu();
 
 // debug/testing hook (harmless in production)
-window.__CB = { getState: () => S, scoreChain, makeDomino, startRound, render };
+window.__CB = { getState: () => S, scoreChain, makeDomino, startRound, render, CHARMS };

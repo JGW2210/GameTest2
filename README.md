@@ -60,7 +60,12 @@ instead. Materials (Gold pays $1 when played, Crystal doubles joints but may sha
 seals (Ruby retrigger / Gold $2 / Azure returns to hand / Amber opening hand), wild ★
 ends and cursed bones all still exist — they're just won, not bought.
 
-### Charms currently in the pool
+### Charms currently in the pool (47)
+
+Charms are the backbone of the rogue-like element — the pool is deliberately wide so
+runs draft differently every time. Five broad families:
+
+**Scoring rules** (the originals):
 
 | Charm | Rarity | Effect |
 |---|---|---|
@@ -72,17 +77,66 @@ ends and cursed bones all still exist — they're just won, not bought.
 | 🎯 High Roller | uncommon | Best joint counted twice |
 | 🪶 Minimalist | uncommon | 3-domino chains +40 |
 | 🐍 Snake Charmer | rare | Non-decreasing chains score ×1.5 |
-| ⛏️ Gold Digger | common | $1 per double played |
 | 🎢 Momentum | uncommon | Each joint +4 per joint to its left |
-| 🕕 Sixth Sense | common | +10 per joint touching a 6 |
-| 🔮 Crystal Ball | rare | Crystal dominoes never shatter |
-| 🐷 Piggy Bank | common | $1 at round end per unused discard |
 | 📏 Surveyor | common | +5 per domino in the played chain |
 | 🎲 Loaded Dice | uncommon | 1-in-3 chance a played chain scores ×2 |
 | 🎪 Centerpiece | rare | The second joint scores ×2 |
 | 🧿 Absolute | rare | Every end and joint scores its absolute value |
-| ♾️ Ouroboros | **legendary** | The exposed ends are also multiplied together and added as a phantom joint |
-| 🗿 Keystone | **legendary** | +1 chain slot while it sits on your shelf — sell it and the table shrinks back |
+| 🥊 Left Hook | common | The first joint +15 |
+| ⚓ Anchor | common | The last joint +15 |
+| ⏬ Countdown | rare | Non-increasing chains score ×1.5 |
+
+**The pip family** — one charm per number, rarer at the top (7-9 only exist through
+upgrades, blank-slate 7s and wild resonance, so their charms pay accordingly):
+
+| Charm | Rarity | Effect |
+|---|---|---|
+| 🅰️ Ace High | uncommon | Scored 1s count as 10s |
+| ✌️ Deuce Deuce | uncommon | Joints touching a 2 score ×2 |
+| 3️⃣ Third Degree | common | +15 per 3 scored |
+| 4️⃣ Foursquare | uncommon | Scored 4s count as 8s (combos with Crazy Eights!) |
+| 🖐️ High Five | uncommon | +25 per joint whose result is a multiple of 5 |
+| 🕕 Sixth Sense | common | +10 per joint touching a 6 |
+| 7️⃣ Lucky Seven | rare | Joints touching a 7 score ×2 (combos with Blank Slate) |
+| 🎱 Crazy Eights | rare | +28 per 8 scored |
+| ☁️ Cloud Nine | rare | Exposed ends showing 9 count as 99 |
+
+**Post-scoring conditionals** — trigger after the chain lands, if a condition is met:
+
+| Charm | Rarity | Effect |
+|---|---|---|
+| 🔔 Encore Bell | uncommon | Chains scoring 100+ pay $2 |
+| 🪽 Phoenix Feather | rare | Once per round, a chain under 20 refunds its play |
+| 💠 Perfectionist | rare | All joints (2+) equal → chain ×2 |
+| ⚗️ Alchemist | rare | 1-in-5 chance a played plain domino turns gold |
+| 🧲 Collector | common | Chains containing a double +20 |
+| 🪞 Mirror Mask | rare | Palindromic chains score ×2 |
+| 🐦 Early Bird | uncommon | First chain each round ×1.5 |
+| 🏁 The Closer | uncommon | Chains on your last play ×1.5 |
+
+**Economy & synergy:**
+
+| Charm | Rarity | Effect |
+|---|---|---|
+| ⛏️ Gold Digger | common | $1 per double played |
+| 🔮 Crystal Ball | rare | Crystal dominoes never shatter |
+| 🐷 Piggy Bank | common | $1 at round end per unused discard |
+| 🤝 Haggler | uncommon | First purchase each shop $2 cheaper |
+| 🏦 Trust Fund | rare | Interest pays $1 per $4 instead of $5 |
+| ♻️ Scrapper | common | Shattered crystals pay $5 |
+| 💍 Jeweler | uncommon | +15 chain score per gold domino played |
+| 🦭 Sealkeeper | uncommon | +12 chain score per sealed domino played |
+| 🪦 Grave Robber | uncommon | $1 per negative pip scored |
+| 🧤 Dumpster Diver | uncommon | +10 chain score per discard used this round |
+
+**Legendaries:**
+
+| Charm | Effect |
+|---|---|
+| ♾️ Ouroboros | Exposed ends multiplied together as a phantom joint |
+| 🗿 Keystone | +1 chain slot while shelved |
+| 📢 Echo Chamber | Every joint retriggers its base value |
+| 🎰 House Edge | The Wheels of Fortune always land on their jackpot |
 
 Shop charm offers are **steeply rarity-weighted** (common 10 : uncommon 4 : rare 1 :
 legendary 0.15) — per shop slot a rare is roughly 1-in-15 and a legendary roughly
