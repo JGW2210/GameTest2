@@ -43,12 +43,31 @@ function makeDomino(a, b, opts = {}) {
     aOp: opts.aOp || 'mul',
     bOp: opts.bOp || 'mul',
     material: opts.material || 'plain', // plain | gold | crystal
-    seal: opts.seal || null, // null | 'ruby'
+    seal: opts.seal || null, // null | 'ruby' | 'gold' | 'azure' | 'amber'
+    aWild: !!opts.aWild, // wild ends copy the pip value they touch
+    bWild: !!opts.bWild,
   };
 }
-// Power ends are LEGENDARY and exclusive: a powered domino cannot be
-// duplicated, its ends cannot gain pips, and it cannot hold a seal.
+// Power and wild ends are LEGENDARY and exclusive: such a domino cannot be
+// duplicated, the legendary end's pips are locked, it cannot hold a seal,
+// and a domino carries at most ONE legendary end.
 const isPowered = (d) => d.aOp === 'pow' || d.bOp === 'pow';
+const isWild = (d) => d.aWild || d.bWild;
+const isLegendaryMod = (d) => isPowered(d) || isWild(d);
+// an end can gain pips only if it is neither powered nor wild
+const canPipEnd = (d, end) => d[end] < 9 && d[end + 'Op'] !== 'pow' && !d[end + 'Wild'];
+
+/* ---------------- seals ---------------- */
+const SEALS = {
+  ruby: { icon: '🔴', name: 'Ruby Seal', price: 6,
+    desc: 'Every joint it touches retriggers — the joint\'s base value scores again.' },
+  gold: { icon: '🟡', name: 'Gold Seal', price: 5,
+    desc: 'Pays $2 every time it is played in a chain.' },
+  azure: { icon: '🔵', name: 'Azure Seal', price: 7,
+    desc: 'Returns to your hand after the chain scores instead of being consumed.' },
+  amber: { icon: '🟠', name: 'Amber Seal', price: 4,
+    desc: 'Guaranteed to be in your opening hand every round.' },
+};
 function startingPouch() {
   const pouch = [];
   for (let a = 0; a <= 6; a++)
@@ -62,8 +81,8 @@ function startingPouch() {
 function ends(entry) {
   const d = entry.d;
   return entry.flipped
-    ? { l: d.b, r: d.a, lOp: d.bOp, rOp: d.aOp }
-    : { l: d.a, r: d.b, lOp: d.aOp, rOp: d.bOp };
+    ? { l: d.b, r: d.a, lOp: d.bOp, rOp: d.aOp, lWild: d.bWild, rWild: d.aWild }
+    : { l: d.a, r: d.b, lOp: d.aOp, rOp: d.bOp, lWild: d.aWild, rWild: d.bWild };
 }
 
 /* ---------------- charms (the "Jokers") ---------------- */
@@ -102,9 +121,15 @@ const CHARMS = [
     desc: 'The second joint of every chain scores ×2.' },
   { id: 'ouro', icon: '♾️', name: 'Ouroboros', rarity: 'legendary', price: 12,
     desc: 'The chain bites its tail: the two exposed ends are also multiplied together and added as a phantom joint.' },
+  { id: 'abs', icon: '🧿', name: 'Absolute', rarity: 'rare', price: 7,
+    desc: 'Every end and joint scores its absolute value — cursed bones turn holy.' },
+  { id: 'keystone', icon: '🗿', name: 'Keystone', rarity: 'legendary', price: 14,
+    desc: '+1 chain slot while this sits on your shelf.' },
 ];
 const MAX_CHARMS = 5;
 const has = (id) => S.charms.some((c) => c.id === id);
+// chain length: base (4, voucher-raised to 6) +1 while Keystone is shelved
+const effChainSize = () => Math.min(7, S.chainSize + (has('keystone') ? 1 : 0));
 
 /* ---------------- vouchers (the "Vouchers") ---------------- */
 const VOUCHERS = [
@@ -171,9 +196,12 @@ function startRound(round) {
   S.playsLeft = S.boss && S.boss.id === 'heavy' ? 2 : S.playsMax;
   S.discardsLeft = S.discardsMax;
   S.score = 0;
-  S.chain = Array(S.chainSize).fill(null);
+  S.chain = Array(effChainSize()).fill(null);
   S.drawPile = shuffle(S.pouch);
-  S.hand = S.drawPile.splice(0, S.handSize);
+  // amber-sealed dominoes are guaranteed in the opening hand
+  const ambers = S.drawPile.filter((d) => d.seal === 'amber').slice(0, S.handSize);
+  S.drawPile = S.drawPile.filter((d) => !ambers.includes(d));
+  S.hand = ambers.concat(S.drawPile.splice(0, S.handSize - ambers.length));
   S.discardMode = false;
   S.discardSel.clear();
   render();
@@ -204,28 +232,51 @@ function scoreChain(entries, opts = {}) {
   let money = 0;
 
   const E = entries.map(ends);
-  const firstVal = effVal(E[0].l);
-  const lastVal = effVal(E[n - 1].r);
+
+  // resolve values: blank-slate 0→7, then wild ends copy the pip they touch.
+  // At a joint a wild copies the opposing end; two facing wilds resonate as
+  // 7s; an exposed wild copies its own domino's other end.
+  const res = E.map((e) => ({ l: effVal(e.l), r: effVal(e.r) }));
+  for (let i = 0; i < n - 1; i++) {
+    const aW = E[i].rWild, bW = E[i + 1].lWild;
+    if (aW && bW) { res[i].r = 7; res[i + 1].l = 7; }
+    else if (aW) res[i].r = res[i + 1].l;
+    else if (bW) res[i + 1].l = res[i].r;
+  }
+  if (E[0].lWild) res[0].l = E[0].rWild ? 7 : res[0].r;
+  if (E[n - 1].rWild) res[n - 1].r = E[n - 1].lWild ? 7 : res[n - 1].l;
+
+  const exprNum = (v) => (v < 0 ? `(${v})` : String(v));
+  const absify = (v, what) => {
+    if (has('abs') && v < 0) { lines.push({ label: `🧿 Absolute: ${what}`, amt: -2 * v }); return -v; }
+    return v;
+  };
+
+  const rawFirst = res[0].l;
+  const rawLast = res[n - 1].r;
+  const firstVal = absify(rawFirst, 'left end');
+  const lastVal = absify(rawLast, 'right end');
 
   // --- exposed left end ---
   let endL = firstVal;
-  exprParts.push(String(firstVal));
+  exprParts.push(exprNum(rawFirst));
   if (has('bookends')) { lines.push({ label: '📚 Bookends: left end ×4', amt: endL * 3 }); endL *= 4; }
   total += endL;
 
   // --- joints ---
   for (let i = 0; i < n - 1; i++) {
-    const a = effVal(E[i].r);
-    const b = effVal(E[i + 1].l);
+    const a = res[i].r;
+    const b = res[i + 1].l;
     const isPow = E[i].rOp === 'pow' || E[i + 1].lOp === 'pow';
     let v = isPow ? Math.pow(a, b) : a * b;
-    exprParts.push(`${a}${isPow ? '^' : '×'}${b}`);
+    exprParts.push(`${exprNum(a)}${isPow ? '^' : '×'}${exprNum(b)}`);
 
     if (S.boss && S.boss.id === 'censor' && i === 0) {
       lines.push({ label: '🤐 The Censor silences the first joint', amt: -v });
       jointVals.push(0);
       continue; // censored: no bonuses either
     }
+    v = absify(v, `joint ${i + 1}`);
     const base = v;
     // crystal material: each crystal participant doubles the joint
     let crystals = 0;
@@ -248,7 +299,7 @@ function scoreChain(entries, opts = {}) {
 
   // --- exposed right end ---
   let endR = lastVal;
-  exprParts.push(String(lastVal));
+  exprParts.push(exprNum(rawLast));
   if (has('bookends')) { lines.push({ label: '📚 Bookends: right end ×4', amt: endR * 3 }); endR *= 4; }
   total += endR;
 
@@ -267,7 +318,7 @@ function scoreChain(entries, opts = {}) {
   if (has('mini') && n === 3) { lines.push({ label: '🪶 Minimalist', amt: 40 }); total += 40; }
   if (has('snake')) {
     const seq = [];
-    E.forEach((e) => { seq.push(effVal(e.l), effVal(e.r)); });
+    res.forEach((e) => { seq.push(e.l, e.r); });
     if (seq.every((v, i) => i === 0 || seq[i - 1] <= v)) {
       const bonus = total * 0.5;
       lines.push({ label: '🐍 Snake Charmer: chain ×1.5', amt: bonus });
@@ -285,6 +336,7 @@ function scoreChain(entries, opts = {}) {
   const shattered = [];
   entries.forEach((e) => {
     if (e.d.material === 'gold') money++;
+    if (e.d.seal === 'gold') money += 2;
     if (has('digger') && e.d.a === e.d.b) money++;
     if (e.d.material === 'crystal' && !has('ball') && Math.random() < 0.25) shattered.push(e.d);
   });
@@ -297,10 +349,16 @@ function scoreChain(entries, opts = {}) {
    ===================================================================== */
 const PIP_CELLS = { 0: [], 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
-function halfEl(val, op, side) {
+function halfEl(val, op, side, wild) {
   const half = document.createElement('div');
   half.className = `half ${side}`;
-  if (val <= 6) {
+  if (wild) {
+    const num = document.createElement('div');
+    num.className = 'numval wild';
+    num.textContent = '★';
+    num.title = 'Wild end: copies the pip value it touches';
+    half.appendChild(num);
+  } else if (val >= 0 && val <= 6) {
     for (let cell = 0; cell < 9; cell++) {
       const spot = document.createElement('div');
       if (PIP_CELLS[val].includes(cell)) spot.className = 'pip';
@@ -309,7 +367,7 @@ function halfEl(val, op, side) {
     }
   } else {
     const num = document.createElement('div');
-    num.className = 'numval';
+    num.className = 'numval' + (val < 0 ? ' neg' : '');
     num.textContent = val;
     half.appendChild(num);
   }
@@ -328,12 +386,13 @@ function dominoEl(d, { flipped = false, small = false } = {}) {
   el.className = 'domino' + (small ? ' small' : '') + (d.material !== 'plain' ? ` mat-${d.material}` : '');
   const l = flipped ? d.b : d.a, r = flipped ? d.a : d.b;
   const lOp = flipped ? d.bOp : d.aOp, rOp = flipped ? d.aOp : d.bOp;
-  el.appendChild(halfEl(l, lOp, 'left'));
-  el.appendChild(halfEl(r, rOp, 'right'));
-  if (d.seal === 'ruby') {
+  const lW = flipped ? d.bWild : d.aWild, rW = flipped ? d.aWild : d.bWild;
+  el.appendChild(halfEl(l, lOp, 'left', lW));
+  el.appendChild(halfEl(r, rOp, 'right', rW));
+  if (d.seal) {
     const dot = document.createElement('span');
-    dot.className = 'seal-dot';
-    dot.title = 'Ruby Seal: this domino retriggers its joints';
+    dot.className = `seal-dot seal-${d.seal}`;
+    dot.title = `${SEALS[d.seal].name}: ${SEALS[d.seal].desc}`;
     el.appendChild(dot);
   }
   return el;
@@ -484,7 +543,7 @@ function flipSlot(slotIdx) {
 
 function clearChain() {
   S.chain.forEach((entry) => { if (entry) S.hand.push(entry.d); });
-  S.chain = Array(S.chainSize).fill(null);
+  S.chain = Array(S.chain.length).fill(null);
   render();
 }
 
@@ -522,8 +581,11 @@ function playChain() {
     S.pouch = S.pouch.filter((p) => p.id !== d.id);
   });
 
-  // consume played dominoes for the round
-  S.chain = Array(S.chainSize).fill(null);
+  // consume played dominoes for the round — but azure-sealed ones come home
+  entries.forEach((e) => {
+    if (e.d.seal === 'azure' && !r.shattered.includes(e.d)) S.hand.push(e.d);
+  });
+  S.chain = Array(S.chain.length).fill(null);
   refillHand();
 
   showBreakdown(r);
@@ -571,18 +633,56 @@ function afterBreakdown() {
 /* =====================================================================
    ROUND END / ECONOMY
    ===================================================================== */
+// Skip-the-shop tags, Balatro skip-blind style: forgo the Bazaar for a prize
+function rollSkipOffer() {
+  const opts = [
+    { id: 'cash', label: '💰 Windfall Tag: +$10' },
+    { id: 'charm', label: '🎗️ Charm Tag: a free random charm' },
+    { id: 'smith', label: '🔨 Smith Tag: two random dominoes get +1/+1' },
+  ];
+  let o = pick(opts);
+  if (o.id === 'charm' && S.charms.length >= MAX_CHARMS) o = opts[0];
+  return o;
+}
+
+function applySkipOffer() {
+  const o = S.skipOffer;
+  if (o.id === 'cash') { S.money += 10; toast('💰 +$10'); }
+  else if (o.id === 'charm') {
+    const pool = CHARMS.filter((c) => !S.charms.some((x) => x.id === c.id));
+    const c = weightedCharms(pool, 1)[0];
+    if (c) { S.charms.push(c); toast(`${c.icon} ${c.name} joins your shelf!`); }
+    else { S.money += 10; toast('💰 +$10 (no charms left)'); }
+  } else if (o.id === 'smith') {
+    for (let k = 0; k < 2; k++) {
+      const eligible = S.pouch.filter((d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'));
+      if (!eligible.length) break;
+      const d = pick(eligible);
+      if (canPipEnd(d, 'a')) d.a += 1;
+      if (canPipEnd(d, 'b')) d.b += 1;
+      toast(`🔨 (${d.a}|${d.b}) upgraded`);
+    }
+  }
+  $('overlay-roundend').classList.add('hidden');
+  startRound(S.round + 1);
+}
+
 function winRound() {
   const base = 4;
   const playBonus = S.playsLeft;
   const interest = Math.min(S.interestCap, Math.floor(S.money / 5));
   const piggy = has('piggy') ? S.discardsLeft : 0;
+  const bounty = S.boss ? 4 : 0;
   const rows = [
     ['Round cleared', `$${base}`],
     [`Unused plays ×${playBonus}`, `$${playBonus}`],
     [`Interest ($1 per $5, cap $${S.interestCap})`, `$${interest}`],
   ];
   if (piggy) rows.push([`🐷 Piggy Bank: unused discards ×${S.discardsLeft}`, `$${piggy}`]);
-  S.money += base + playBonus + interest + piggy;
+  if (bounty) rows.push(['👑 Boss bounty', `$${bounty}`]);
+  S.money += base + playBonus + interest + piggy + bounty;
+  S.skipOffer = rollSkipOffer();
+  $('btn-skip-shop').textContent = `Skip the Bazaar — ${S.skipOffer.label}`;
   $('re-round').textContent = S.round;
   const bd = $('re-breakdown');
   bd.innerHTML = '';
@@ -615,7 +715,13 @@ function gameOver(reason) {
    ===================================================================== */
 function randomShopDomino() {
   const roll = Math.random();
-  const material = roll < 0.15 ? 'gold' : roll < 0.3 ? 'crystal' : 'plain';
+  if (roll < 0.12) {
+    // cursed bone: big pips, but at least one end is negative
+    const a = -(1 + rand(9));
+    const b = rand(2) ? 1 + rand(9) : -(1 + rand(9));
+    return { d: makeDomino(a, b), price: 1 };
+  }
+  const material = roll < 0.26 ? 'gold' : roll < 0.4 ? 'crystal' : 'plain';
   const d = makeDomino(rand(7), rand(7), { material });
   const price = 3 + (material === 'plain' ? 0 : 3) + (d.a + d.b >= 9 ? 1 : 0);
   return { d, price };
@@ -647,9 +753,10 @@ function generateShop() {
     charms: weightedCharms(charmPool, 2).map((c) => ({ c, sold: false })),
     dominoes: [randomShopDomino(), randomShopDomino()].map((o) => ({ ...o, sold: false })),
     voucher: voucherPool.length ? { v: voucherPool[0], sold: false } : null,
-    powerBrush: Math.random() < 0.15, // LEGENDARY service: rarely in stock
-    rubySeal: Math.random() < 0.5,    // uncommon service
-    services: { pip: false, pip1: false, dup: false, cull: false, brush: false, seal: false, pack: false }, // sold flags
+    powerBrush: Math.random() < 0.15,  // LEGENDARY service: rarely in stock
+    chameleon: Math.random() < 0.12,   // LEGENDARY service: rarely in stock
+    sealColor: pick(Object.keys(SEALS)), // one seal colour per shop
+    services: { pip: false, pip1: false, dup: false, cull: false, brush: false, chamel: false, seal: false, pack: false, cpack: false }, // sold flags
   };
 }
 
@@ -749,7 +856,8 @@ function renderShop() {
   // --- dominoes ---
   const domRow = section('Fresh Bones');
   S.shop.dominoes.forEach((offer) => {
-    const matName = offer.d.material === 'plain' ? '' : offer.d.material === 'gold' ? 'Gold — pays $1 when played. ' : 'Crystal — doubles its joints, may shatter. ';
+    let matName = offer.d.material === 'plain' ? '' : offer.d.material === 'gold' ? 'Gold — pays $1 when played. ' : 'Crystal — doubles its joints, may shatter. ';
+    if (offer.d.a < 0 || offer.d.b < 0) matName = 'CURSED — negative pips subtract… unless you go Absolute. ';
     item(domRow, {
       name: `Domino (${offer.d.a}|${offer.d.b})`,
       desc: matName + 'Added to your pouch.',
@@ -769,11 +877,11 @@ function renderShop() {
   item(svcRow, {
     name: '🔨 Pip Up', desc: '+1 pip to BOTH ends of a chosen domino (max 9). Power ends are locked.', price: 3,
     sold: S.shop.services.pip,
-    onBuy: () => pickDomino('Pip Up: choose a domino', 'Non-power ends gain +1 pip',
-      (d) => (d.aOp !== 'pow' && d.a < 9) || (d.bOp !== 'pow' && d.b < 9), (d) => {
+    onBuy: () => pickDomino('Pip Up: choose a domino', 'Non-legendary ends gain +1 pip',
+      (d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'), (d) => {
       if (!spend(3)) return;
-      if (d.aOp !== 'pow') d.a = Math.min(9, d.a + 1);
-      if (d.bOp !== 'pow') d.b = Math.min(9, d.b + 1);
+      if (canPipEnd(d, 'a')) d.a += 1;
+      if (canPipEnd(d, 'b')) d.b += 1;
       S.shop.services.pip = true;
       toast(`Upgraded to (${d.a}|${d.b})`);
       renderShop();
@@ -782,9 +890,9 @@ function renderShop() {
   item(svcRow, {
     name: '🔧 Precision Pip', desc: '+1 pip to ONE chosen end (max 9). Power ends are locked.', price: 2,
     sold: S.shop.services.pip1,
-    onBuy: () => pickEnd('Precision Pip: tap the end to upgrade', (d, end) => d[end] < 9 && d[end + 'Op'] !== 'pow', (d, end) => {
+    onBuy: () => pickEnd('Precision Pip: tap the end to upgrade', canPipEnd, (d, end) => {
       if (!spend(2)) return;
-      d[end] = Math.min(9, d[end] + 1);
+      d[end] += 1;
       S.shop.services.pip1 = true;
       toast(`Upgraded to (${d.a}|${d.b})`);
       renderShop();
@@ -804,16 +912,32 @@ function renderShop() {
       }),
     });
   }
-  if (S.shop.rubySeal) {
+  if (S.shop.chameleon) {
     item(svcRow, {
-      name: '🔴 Ruby Seal', desc: 'Seal a domino: every joint it touches retriggers (its base value scores again). Power dominoes cannot be sealed.', price: 6,
-      rarity: 'uncommon', sold: S.shop.services.seal,
-      onBuy: () => pickDomino('Ruby Seal: choose a domino', 'Its joints will retrigger',
-        (d) => !d.seal && !isPowered(d), (d) => {
-        if (!spend(6)) return;
-        d.seal = 'ruby';
+      name: '🦎 Chameleon Brush',
+      desc: 'LEGENDARY: turn one end WILD — it copies the pip value it touches (facing wilds resonate as 7s; exposed wilds mirror their own domino). Same exclusivity rules as power ends.',
+      price: 12, rarity: 'legendary', sold: S.shop.services.chamel,
+      onBuy: () => pickEnd('Chameleon Brush: tap the end to make wild', (d) => !isLegendaryMod(d), (d, end) => {
+        if (!spend(12)) return;
+        d[end + 'Wild'] = true;
+        S.shop.services.chamel = true;
+        toast('A wild end joins your pouch!');
+        renderShop();
+      }),
+    });
+  }
+  {
+    const sc = S.shop.sealColor;
+    const sd = SEALS[sc];
+    item(svcRow, {
+      name: `${sd.icon} ${sd.name}`, desc: sd.desc + ' One seal per domino; legendary dominoes cannot be sealed.',
+      price: sd.price, rarity: 'uncommon', sold: S.shop.services.seal,
+      onBuy: () => pickDomino(`${sd.name}: choose a domino`, sd.desc,
+        (d) => !d.seal && !isLegendaryMod(d), (d) => {
+        if (!spend(sd.price)) return;
+        d.seal = sc;
         S.shop.services.seal = true;
-        toast(`(${d.a}|${d.b}) sealed in ruby!`);
+        toast(`(${d.a}|${d.b}) sealed!`);
         renderShop();
       }),
     });
@@ -822,7 +946,7 @@ function renderShop() {
     name: '🪞 Duplicate', desc: 'Copy one domino — the pouch offers 10 at random. Power dominoes never appear.', price: 5,
     sold: S.shop.services.dup,
     onBuy: () => {
-      const offer = shuffle(S.pouch.filter((d) => !isPowered(d))).slice(0, 10);
+      const offer = shuffle(S.pouch.filter((d) => !isLegendaryMod(d))).slice(0, 10);
       pickDomino('Duplicate: the pouch offers these 10', 'A copy of your pick joins the pouch', () => true, (d) => {
         if (!spend(5)) return;
         S.pouch.push(makeDomino(d.a, d.b, { material: d.material, seal: d.seal }));
@@ -844,6 +968,22 @@ function renderShop() {
         toast(`(${d.a}|${d.b}) joins your pouch`);
         renderShop();
       }, packContents);
+    },
+  });
+  const cpackPool = CHARMS.filter((c) => !S.charms.some((x) => x.id === c.id));
+  item(svcRow, {
+    name: '🎴 Charm Pack', desc: 'Crack a pack of 3 random charms and keep ONE.', price: 6,
+    sold: S.shop.services.cpack,
+    disabled: S.charms.length >= MAX_CHARMS || cpackPool.length === 0,
+    onBuy: () => {
+      const packCharms = weightedCharms(cpackPool, 3);
+      pickCharm('Charm Pack: keep one', 'The others return to the ether', packCharms, (c) => {
+        if (!spend(6)) return;
+        S.charms.push(c);
+        S.shop.services.cpack = true;
+        toast(`${c.icon} ${c.name} joins your shelf!`);
+        renderShop();
+      });
     },
   });
   item(svcRow, {
@@ -908,6 +1048,18 @@ function pickDomino(title, sub, eligible, cb, list) {
     grid.appendChild(el);
   });
 }
+function pickCharm(title, sub, charms, cb) {
+  openPicker(title, sub);
+  const grid = $('picker-grid');
+  charms.forEach((c) => {
+    const el = document.createElement('div');
+    el.className = 'charm-card';
+    el.innerHTML = `<span class="si-rarity ${c.rarity}">${c.rarity}</span><span class="cc-name">${c.icon} ${c.name}</span><span class="cc-desc">${c.desc}</span>`;
+    el.onclick = () => { closePicker(); cb(c); };
+    grid.appendChild(el);
+  });
+}
+
 function pickEnd(title, eligible, cb) {
   openPicker(title, 'Tap the specific half of a domino');
   const grid = $('picker-grid');
@@ -960,6 +1112,7 @@ function bind() {
   $('btn-discard-confirm').onclick = confirmDiscard;
 
   $('btn-to-shop').onclick = openShop;
+  $('btn-skip-shop').onclick = applySkipOffer;
   $('btn-reroll').onclick = rerollShop;
   $('btn-next-round').onclick = () => {
     $('overlay-shop').classList.add('hidden');

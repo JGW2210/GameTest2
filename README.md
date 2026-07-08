@@ -35,7 +35,12 @@ formula and the deck. Chainbone maps each of those axes onto dominoes:
 | Planet cards | **Pip Up / Precision Pip** (+1 to end values, up to 9; power ends are locked) | Raw numbers |
 | Legendary Jokers | **Power Brush** (LEGENDARY) — converts an end's operator from × to ^ (appears in ~15% of shops) | The *operators* themselves |
 | Card editions (foil/holo/gold) | **Materials**: Gold (pays $1 when played), Crystal (doubles its joints but may shatter) | Risk/economy per card |
-| Seals | **Ruby Seal** — a sealed domino's joints retrigger (base value scores again) | Per-card retriggers |
+| Seals | **Seals** (one colour in stock per shop): Ruby retriggers joints, Gold pays $2 when played, Azure returns to hand after scoring, Amber is guaranteed in the opening hand | Per-card retriggers & economy |
+| Wild cards | **Chameleon Brush** (LEGENDARY) — a wild ★ end copies the pip it touches; facing wilds resonate as 7s | Adaptive values |
+| Cursed cards | **Cursed bones** — cheap dominoes with negative pips; the 🧿 Absolute charm turns them holy | Risk/reward deck-building |
+| Booster packs | **Charm Pack** — crack 3 random charms, keep one | Cheaper charm access, RNG-gated |
+| Skip tags | **Skip the Bazaar** — forgo the shop for a rolled tag: +$10, a free charm, or free pip upgrades | Tempo vs. greed |
+| Boss rewards | **Boss bounty** — clearing a boss round pays +$4 | Risk compensation |
 | Buying/destroying cards | **Fresh Bones** (buy dominoes) and **Cull** (thin the pouch) | Deck composition & draw consistency |
 | Duplicating cards | **Duplicate** — the pouch offers **10 random dominoes**, pick one to copy (power dominoes never appear) | Deck consistency, RNG-gated |
 | Booster packs | **Bone Pack** — crack 3 random dominoes, keep one | Deck growth with choice |
@@ -63,7 +68,9 @@ formula and the deck. Chainbone maps each of those axes onto dominoes:
 | 📏 Surveyor | common | +5 per domino in the played chain |
 | 🎲 Loaded Dice | uncommon | 1-in-3 chance a played chain scores ×2 |
 | 🎪 Centerpiece | rare | The second joint scores ×2 |
+| 🧿 Absolute | rare | Every end and joint scores its absolute value |
 | ♾️ Ouroboros | **legendary** | The exposed ends are also multiplied together and added as a phantom joint |
+| 🗿 Keystone | **legendary** | +1 chain slot while it sits on your shelf — sell it and the table shrinks back |
 
 Shop charm offers are **rarity-weighted** (common 6 : uncommon 3 : rare 1.5 : legendary 0.5),
 so legendaries are a genuine event, not a shelf staple.
@@ -95,17 +102,24 @@ Balance tweaks applied in the same spirit elsewhere:
 - **Ruby Seal retriggers base joint value** (not the post-multiplier value), so it adds
   rather than compounds with Crystal/Twin Flame.
 
+### Wild ends & the legendary exclusivity rule
+
+Wild ★ ends (Chameleon Brush) follow the same exclusivity contract as power ends —
+together they form the **legendary modification** class: a domino carries at most one
+legendary end, can't be duplicated, can't hold a seal, and the legendary end's pips are
+locked. At a joint a wild copies the opposing pip (auto-triggering Twin Flame, which is
+the intended synergy); two facing wilds resonate as 7s; an exposed wild mirrors its own
+domino's other end.
+
 ### Ideas for future upgrade axes
 
-- **More seals**: a seal that returns the domino to hand after play; one that draws it
-  first every round; a gold seal paying $2.
-- **Wildcard ends**: an end that copies the pip value it touches (legendary, same
-  exclusivity rules as power ends).
-- **Negative pips**: risky dominoes that subtract but combo with an "absolute value" charm.
-- **Chain shapes**: vouchers unlocking branching (T-shaped) chains with two exposed ends.
-- **Charm packs**: pick 1 of 3 random charms, cheaper than buying direct.
-- **Skip rewards**: skip a shop for a guaranteed rare, mirroring Balatro's skip tags.
-- **Boss-specific rewards**: beating a boss round grants a choice of one free service.
+- **Chain shapes**: vouchers unlocking branching (T-shaped) chains with two exposed
+  ends. Deferred — this reworks the board layout, the scorer's joint-walk, and slot
+  UI, so it deserves a dedicated pass: the sketch is a T-junction slot under slot 2
+  whose branch multiplies into both neighbours and exposes a third added end.
+- **Seal fusion**: combine two sealed dominoes into one dual-seal domino (legendary).
+- **Boss relics**: beating a boss grants a choice of one free workbench service.
+- **Endless mode**: after round 12, goals go super-exponential for leaderboard chasing.
 
 ## Files
 
