@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Chainbone — a domino deck-builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -66,6 +69,7 @@
     <h2>Round <span id="re-round"></span> cleared!</h2>
     <div id="re-breakdown" class="cash-breakdown"></div>
     <button id="btn-to-shop" class="btn btn-big btn-gold">Go to Shop</button>
+    <button id="btn-skip-shop" class="btn"></button>
   </div>
 </div>
 
@@ -91,6 +95,15 @@
     <div id="go-stats" class="go-stats"></div>
     <button id="btn-restart" class="btn btn-big btn-gold">New Run</button>
     <button id="btn-to-menu" class="btn btn-ghost">Main Menu</button>
+  </div>
+</div>
+
+<!-- ===================== WHEEL SPIN ===================== -->
+<div id="modal-wheel" class="overlay hidden">
+  <div class="panel">
+    <h2 id="wheel-title"></h2>
+    <div id="wheel-outcomes" class="wheel-outcomes"></div>
+    <button id="btn-wheel-claim" class="btn btn-big btn-gold" disabled>Spinning…</button>
   </div>
 </div>
 
@@ -133,9 +146,13 @@
       <p><strong>Goal:</strong> each round has a score goal. Build domino chains until your round score breaches it. Fail with no plays left and the run is over.</p>
       <p><strong>Chains:</strong> tap dominoes in your hand to lay them left-to-right (up to <em>4 slots</em> to start). Tap a placed domino to <em>flip</em> it. You need at least 2 dominoes to play a chain.</p>
       <p><strong>Scoring (BIDMAS):</strong> the two exposed outer ends are <em>added</em>; every pair of touching ends is <em>multiplied</em>. So (1|2)(3|4)(5|6)(6|1) scores 1 + 2×3 + 4×5 + 6×6 + 1 = <strong>64</strong>.</p>
-      <p><strong>Power ends:</strong> a rare upgrade turns an end's operator from × into ^. A joint touching a power end scores aᵇ instead of a×b — powers bind before multiplication, exactly as BIDMAS demands.</p>
+      <p><strong>Power ends (LEGENDARY):</strong> a legendary upgrade turns an end's operator from × into ^. A joint touching a power end scores aᵇ instead of a×b — powers bind before multiplication, exactly as BIDMAS demands. Powered dominoes are exclusive: they can't be duplicated, the powered end's pips are locked forever, they can't be sealed, and each domino can hold only one power end.</p>
+      <p><strong>Wild ends (LEGENDARY):</strong> a Chameleon-brushed end shows ★ and copies the pip value it touches. Two facing wilds resonate as 7s; an exposed wild mirrors its own domino's other end. Same exclusivity rules as power ends.</p>
+      <p><strong>Seals</strong> (one per domino, never on legendaries): <span style="color:#f0655a">Ruby</span> retriggers every joint it touches; <span style="color:#e8b84b">Gold</span> pays $2 when played; <span style="color:#6fb7e8">Azure</span> returns to your hand after scoring; <span style="color:#f0a04b">Amber</span> is guaranteed in your opening hand.</p>
+      <p><strong>Cursed bones:</strong> cheap dominoes with negative pips that subtract from your chain — unless the 🧿 Absolute charm turns every value positive.</p>
+      <p><strong>Skipping the shop:</strong> after clearing a round you may skip the Bazaar for a rolled tag reward — cash, a free charm, or free pip upgrades. Boss rounds pay a $4 bounty.</p>
       <p><strong>Plays &amp; discards:</strong> 3 plays per round; scoring a chain consumes its dominoes for the round and refills your hand. Discards let you swap up to 5 hand dominoes, 3 times per round.</p>
-      <p><strong>Money:</strong> clear a round to earn $4, plus $1 per unused play, plus interest ($1 per $5 held). Spend it in the Bone Bazaar on charms, new dominoes, pip upgrades, power ends and vouchers.</p>
+      <p><strong>Money:</strong> clear a round to earn $4, plus $1 per unused play, plus interest ($1 per $5 held). Spend it in the Bone Bazaar on charms, dominoes, targeted pip work — and the <strong>Wheels of Fortune</strong>: pay to spin, the wheel picks your prize. Seals, brushes, packs and the rarest magics live on the wheels now.</p>
       <p><strong>Materials:</strong> <span class="mat-gold">Gold</span> dominoes pay $1 whenever they score. <span class="mat-crystal">Crystal</span> dominoes double every joint they touch — but may shatter after scoring.</p>
       <p><strong>Bosses:</strong> every 3rd round a boss twists the rules. Read the banner.</p>
     </div>

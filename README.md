@@ -31,17 +31,41 @@ formula and the deck. Chainbone maps each of those axes onto dominoes:
 
 | Balatro concept | Chainbone equivalent | Axis it touches |
 |---|---|---|
-| Jokers | **Charms** (max 5 on the shelf, sellable for half) | Passive scoring rules |
-| Planet cards | **Pip Up / Precision Pip** (+1 to end values, up to 9) | Raw numbers |
-| Spectral/rare edits | **Power Brush** — converts an end's operator from × to ^ (appears in ~1/3 of shops) | The *operators* themselves |
-| Card editions (foil/holo/gold) | **Materials**: Gold (pays $1 when played), Crystal (doubles its joints but may shatter) | Risk/economy per card |
-| Buying/destroying cards | **Fresh Bones** (buy dominoes) and **Cull** (thin the pouch) | Deck composition & draw consistency |
-| Duplicating cards | **Duplicate** a domino | Deck consistency |
+| Jokers | **Charms** (max 5 on the shelf, sellable for half; shop offers are steeply rarity-weighted) | Passive scoring rules |
+| Planet cards | **Pip Up** on the workbench (+1/+1, legendary ends locked) | Raw numbers |
+| Destroying cards | **Cull** on the workbench (thin the pouch, min 8) | Draw consistency |
+| Buying cards | **Fresh Bones** — 2 dominoes per shop, sometimes gold/crystal/cursed | Deck composition |
+| Everything else | **The Wheels of Fortune** — pay to spin, the wheel picks the prize (see below) | Consolidated RNG economy |
 | Vouchers | **Vouchers**: Long Table (+1 chain slot), Deep Pockets (+1 hand size), Encore (+1 play), Second Wind (+1 discard), Green Thumb (interest cap) | The run's fundamental constraints |
+| Skip tags | **Skip the Bazaar** — forgo the shop for a rolled tag: +$10, a free charm, or free pip upgrades | Tempo vs. greed |
 | Interest & economy | $1 per $5 held (capped), reroll costs that escalate | Money as a strategy |
-| Boss Blinds | **Bosses** every 3rd round: no flipping, first joint silenced, fewer plays, higher goal | Forced adaptation |
+| Boss Blinds | **Bosses** every 3rd round (no flipping / first joint silenced / fewer plays / higher goal), each paying a $4 bounty | Forced adaptation |
 
-### Charms currently in the pool
+### The Wheels of Fortune
+
+The old à-la-carte services (precision pips, duplicates, seals, brushes, packs) cluttered
+the shop and made rare effects purchasable on demand. They're now **repackaged into
+pay-to-spin wheels** — you buy the spin, the wheel decides the prize, one spin per wheel
+per shop (rerolls restock them):
+
+| Wheel | Price | Outcomes (odds) |
+|---|---|---|
+| 🔨 **Tinker Wheel** | $3 | Pip Up 35% · Precision Pip 25% · Cull 15% · Duplicate-of-10 15% · **gild jackpot 10%** |
+| 🔮 **Mystic Wheel** | $6 | random seal 45% · crystallize 20% · Bone Pack 20% · cursed bone +$3 pity 10% · **legendary brush jackpot 5%** |
+| 🎴 **Arcana Wheel** | $8 | common charm 55% · uncommon 30% · rare 12% · **LEGENDARY charm 3%** |
+| 👑 **Royal Wheel** | $15, in ~25% of shops | Power Brush 30% · Chameleon Brush 30% · legendary charm 15% · **bust ($5 back) 25%** |
+
+If a prize has no valid target (e.g. Cull with a minimum pouch), the house pays out cash
+instead. Materials (Gold pays $1 when played, Crystal doubles joints but may shatter),
+seals (Ruby retrigger / Gold $2 / Azure returns to hand / Amber opening hand), wild ★
+ends and cursed bones all still exist — they're just won, not bought.
+
+### Charms currently in the pool (47)
+
+Charms are the backbone of the rogue-like element — the pool is deliberately wide so
+runs draft differently every time. Five broad families:
+
+**Scoring rules** (the originals):
 
 | Charm | Rarity | Effect |
 |---|---|---|
@@ -53,27 +77,117 @@ formula and the deck. Chainbone maps each of those axes onto dominoes:
 | 🎯 High Roller | uncommon | Best joint counted twice |
 | 🪶 Minimalist | uncommon | 3-domino chains +40 |
 | 🐍 Snake Charmer | rare | Non-decreasing chains score ×1.5 |
-| ⛏️ Gold Digger | common | $1 per double played |
 | 🎢 Momentum | uncommon | Each joint +4 per joint to its left |
+| 📏 Surveyor | common | +5 per domino in the played chain |
+| 🎲 Loaded Dice | uncommon | 1-in-3 chance a played chain scores ×2 |
+| 🎪 Centerpiece | rare | The second joint scores ×2 |
+| 🧿 Absolute | rare | Every end and joint scores its absolute value |
+| 🥊 Left Hook | common | The first joint +15 |
+| ⚓ Anchor | common | The last joint +15 |
+| ⏬ Countdown | rare | Non-increasing chains score ×1.5 |
+
+**The pip family** — one charm per number, rarer at the top (7-9 only exist through
+upgrades, blank-slate 7s and wild resonance, so their charms pay accordingly):
+
+| Charm | Rarity | Effect |
+|---|---|---|
+| 🅰️ Ace High | uncommon | Scored 1s count as 10s |
+| ✌️ Deuce Deuce | uncommon | Joints touching a 2 score ×2 |
+| 3️⃣ Third Degree | common | +15 per 3 scored |
+| 4️⃣ Foursquare | uncommon | Scored 4s count as 8s (combos with Crazy Eights!) |
+| 🖐️ High Five | uncommon | +25 per joint whose result is a multiple of 5 |
 | 🕕 Sixth Sense | common | +10 per joint touching a 6 |
+| 7️⃣ Lucky Seven | rare | Joints touching a 7 score ×2 (combos with Blank Slate) |
+| 🎱 Crazy Eights | rare | +28 per 8 scored |
+| ☁️ Cloud Nine | rare | Exposed ends showing 9 count as 99 |
+
+**Post-scoring conditionals** — trigger after the chain lands, if a condition is met:
+
+| Charm | Rarity | Effect |
+|---|---|---|
+| 🔔 Encore Bell | uncommon | Chains scoring 100+ pay $2 |
+| 🪽 Phoenix Feather | rare | Once per round, a chain under 20 refunds its play |
+| 💠 Perfectionist | rare | All joints (2+) equal → chain ×2 |
+| ⚗️ Alchemist | rare | 1-in-5 chance a played plain domino turns gold |
+| 🧲 Collector | common | Chains containing a double +20 |
+| 🪞 Mirror Mask | rare | Palindromic chains score ×2 |
+| 🐦 Early Bird | uncommon | First chain each round ×1.5 |
+| 🏁 The Closer | uncommon | Chains on your last play ×1.5 |
+
+**Economy & synergy:**
+
+| Charm | Rarity | Effect |
+|---|---|---|
+| ⛏️ Gold Digger | common | $1 per double played |
 | 🔮 Crystal Ball | rare | Crystal dominoes never shatter |
+| 🐷 Piggy Bank | common | $1 at round end per unused discard |
+| 🤝 Haggler | uncommon | First purchase each shop $2 cheaper |
+| 🏦 Trust Fund | rare | Interest pays $1 per $4 instead of $5 |
+| ♻️ Scrapper | common | Shattered crystals pay $5 |
+| 💍 Jeweler | uncommon | +15 chain score per gold domino played |
+| 🦭 Sealkeeper | uncommon | +12 chain score per sealed domino played |
+| 🪦 Grave Robber | uncommon | $1 per negative pip scored |
+| 🧤 Dumpster Diver | uncommon | +10 chain score per discard used this round |
 
-### Design notes: why powers are rare
+**Legendaries:**
 
-A single `^` end changes a joint from `a×b` (max 36 base) to `a^b` (up to 9⁹ with pip
-upgrades). Like Balatro's ×Mult Jokers, exponents are the late-game scaling answer to
-exponentially growing goals — so they're priced high, gated behind shop luck, and BIDMAS
-makes them read naturally: *indices before multiplication*.
+| Charm | Effect |
+|---|---|
+| ♾️ Ouroboros | Exposed ends multiplied together as a phantom joint |
+| 🗿 Keystone | +1 chain slot while shelved |
+| 📢 Echo Chamber | Every joint retriggers its base value |
+| 🎰 House Edge | The Wheels of Fortune always land on their jackpot |
+
+Shop charm offers are **steeply rarity-weighted** (common 10 : uncommon 4 : rare 1 :
+legendary 0.15) — per shop slot a rare is roughly 1-in-15 and a legendary roughly
+1-in-100. The intended route to the top tiers is gambling on the Arcana (3% jackpot)
+and Royal wheels, or the rare direct offer at a premium price (legendaries now $15-16).
+
+### Design notes: why powers are LEGENDARY
+
+A single `^` end changes a joint from `a×b` (max 36 base) to `a^b`. Left unchecked, the
+degenerate line was: brush a (9|9), then Duplicate it every shop — each copy another
+9⁹ ≈ 387M joint. Exponents are the late-game scaling answer to exponentially growing
+goals (like Balatro's ×Mult legendaries), so they stay in the game but behind a
+**legendary exclusivity rule**:
+
+- Power Brush is **legendary**: ~15% shop appearance (was 35%), $12 (was $8).
+- A powered domino **cannot be duplicated** — it never appears in the Duplicate offer.
+- The powered end's pips are **locked forever** (no Pip Up / Precision Pip), capping a
+  brushed 6 at `9^6`; you must choose between growing an end and empowering it.
+- A domino holds **at most one power end**, and **cannot carry a seal** — no
+  retrigger-the-exponent stacking.
+
+Balance tweaks applied in the same spirit elsewhere:
+
+- **Duplicate is RNG-gated**: instead of browsing the whole pouch, you're offered
+  **10 random dominoes** and pick one — copying your best gold/crystal piece is now a
+  lucky find, not a guarantee (mirrors Balatro's pack RNG).
+- **Charm shop offers are rarity-weighted** so rare/legendary charms can't be fished
+  cheaply with rerolls.
+- **Loaded Dice rolls only when a chain is played**, never in the preview, so it can't
+  be scummed by rearranging.
+- **Ruby Seal retriggers base joint value** (not the post-multiplier value), so it adds
+  rather than compounds with Crystal/Twin Flame.
+
+### Wild ends & the legendary exclusivity rule
+
+Wild ★ ends (Chameleon Brush) follow the same exclusivity contract as power ends —
+together they form the **legendary modification** class: a domino carries at most one
+legendary end, can't be duplicated, can't hold a seal, and the legendary end's pips are
+locked. At a joint a wild copies the opposing pip (auto-triggering Twin Flame, which is
+the intended synergy); two facing wilds resonate as 7s; an exposed wild mirrors its own
+domino's other end.
 
 ### Ideas for future upgrade axes
 
-- **Sealed dominoes** (Balatro's seals): a seal that retriggers a domino's joints, one
-  that returns it to hand after play, one that draws it first every round.
-- **Wildcard ends**: an end that copies the pip value it touches.
-- **Negative pips**: risky dominoes that subtract but combo with an "absolute value" charm.
-- **Chain shapes**: vouchers unlocking branching (T-shaped) chains with two exposed ends.
-- **Consumable packs** (Booster analogs): pick-1-of-3 domino packs, charm packs.
-- **Skip rewards**: skip a shop for a guaranteed rare, mirroring Balatro's skip tags.
+- **Chain shapes**: vouchers unlocking branching (T-shaped) chains with two exposed
+  ends. Deferred — this reworks the board layout, the scorer's joint-walk, and slot
+  UI, so it deserves a dedicated pass: the sketch is a T-junction slot under slot 2
+  whose branch multiplies into both neighbours and exposes a third added end.
+- **Seal fusion**: combine two sealed dominoes into one dual-seal domino (legendary).
+- **Boss relics**: beating a boss grants a choice of one free workbench service.
+- **Endless mode**: after round 12, goals go super-exponential for leaderboard chasing.
 
 ## Files
 

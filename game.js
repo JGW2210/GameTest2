@@ -25,6 +25,22 @@ function fmt(n) {
   if (Math.abs(n) >= 10000) return Math.round(n).toLocaleString('en-US');
   return String(Math.round(n * 100) / 100);
 }
+// transient animation flags, consumed by the next render
+let animDeal = false;   // stagger-deal the hand
+let animPop = null;     // chain slot index that just received a domino
+let animFlip = null;    // chain slot index that just flipped
+
+function tweenNumber(el, to, ms = 700) {
+  const t0 = performance.now();
+  const step = (t) => {
+    const p = Math.min(1, (t - t0) / ms);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(to * eased);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function toast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -43,8 +59,31 @@ function makeDomino(a, b, opts = {}) {
     aOp: opts.aOp || 'mul',
     bOp: opts.bOp || 'mul',
     material: opts.material || 'plain', // plain | gold | crystal
+    seal: opts.seal || null, // null | 'ruby' | 'gold' | 'azure' | 'amber'
+    aWild: !!opts.aWild, // wild ends copy the pip value they touch
+    bWild: !!opts.bWild,
   };
 }
+// Power and wild ends are LEGENDARY and exclusive: such a domino cannot be
+// duplicated, the legendary end's pips are locked, it cannot hold a seal,
+// and a domino carries at most ONE legendary end.
+const isPowered = (d) => d.aOp === 'pow' || d.bOp === 'pow';
+const isWild = (d) => d.aWild || d.bWild;
+const isLegendaryMod = (d) => isPowered(d) || isWild(d);
+// an end can gain pips only if it is neither powered nor wild
+const canPipEnd = (d, end) => d[end] < 9 && d[end + 'Op'] !== 'pow' && !d[end + 'Wild'];
+
+/* ---------------- seals ---------------- */
+const SEALS = {
+  ruby: { icon: '🔴', name: 'Ruby Seal', price: 6,
+    desc: 'Every joint it touches retriggers — the joint\'s base value scores again.' },
+  gold: { icon: '🟡', name: 'Gold Seal', price: 5,
+    desc: 'Pays $2 every time it is played in a chain.' },
+  azure: { icon: '🔵', name: 'Azure Seal', price: 7,
+    desc: 'Returns to your hand after the chain scores instead of being consumed.' },
+  amber: { icon: '🟠', name: 'Amber Seal', price: 4,
+    desc: 'Guaranteed to be in your opening hand every round.' },
+};
 function startingPouch() {
   const pouch = [];
   for (let a = 0; a <= 6; a++)
@@ -58,8 +97,8 @@ function startingPouch() {
 function ends(entry) {
   const d = entry.d;
   return entry.flipped
-    ? { l: d.b, r: d.a, lOp: d.bOp, rOp: d.aOp }
-    : { l: d.a, r: d.b, lOp: d.aOp, rOp: d.bOp };
+    ? { l: d.b, r: d.a, lOp: d.bOp, rOp: d.aOp, lWild: d.bWild, rWild: d.aWild }
+    : { l: d.a, r: d.b, lOp: d.aOp, rOp: d.bOp, lWild: d.aWild, rWild: d.bWild };
 }
 
 /* ---------------- charms (the "Jokers") ---------------- */
@@ -78,7 +117,7 @@ const CHARMS = [
     desc: 'Your highest-scoring joint is counted twice.' },
   { id: 'mini', icon: '🪶', name: 'Minimalist', rarity: 'uncommon', price: 5,
     desc: 'Chains of exactly 3 dominoes score +40.' },
-  { id: 'snake', icon: '🐍', name: 'Snake Charmer', rarity: 'rare', price: 7,
+  { id: 'snake', icon: '🐍', name: 'Snake Charmer', rarity: 'rare', price: 8,
     desc: 'If pip values never decrease left→right, the chain scores ×1.5.' },
   { id: 'digger', icon: '⛏️', name: 'Gold Digger', rarity: 'common', price: 5,
     desc: 'Earn $1 for each double (matching-ended) domino you play.' },
@@ -86,11 +125,91 @@ const CHARMS = [
     desc: 'Each joint gains +4 for every joint to its left.' },
   { id: 'sixth', icon: '🕕', name: 'Sixth Sense', rarity: 'common', price: 5,
     desc: '+10 for every joint that touches a 6.' },
-  { id: 'ball', icon: '🔮', name: 'Crystal Ball', rarity: 'rare', price: 7,
+  { id: 'ball', icon: '🔮', name: 'Crystal Ball', rarity: 'rare', price: 8,
     desc: 'Crystal dominoes never shatter.' },
+  { id: 'piggy', icon: '🐷', name: 'Piggy Bank', rarity: 'common', price: 4,
+    desc: 'Earn $1 at round end for every unused discard.' },
+  { id: 'survey', icon: '📏', name: 'Surveyor', rarity: 'common', price: 4,
+    desc: '+5 for every domino in the played chain.' },
+  { id: 'dice', icon: '🎲', name: 'Loaded Dice', rarity: 'uncommon', price: 6,
+    desc: '1-in-3 chance each played chain scores ×2 (rolled when you play).' },
+  { id: 'center', icon: '🎪', name: 'Centerpiece', rarity: 'rare', price: 8,
+    desc: 'The second joint of every chain scores ×2.' },
+  { id: 'ouro', icon: '♾️', name: 'Ouroboros', rarity: 'legendary', price: 15,
+    desc: 'The chain bites its tail: the two exposed ends are also multiplied together and added as a phantom joint.' },
+  { id: 'abs', icon: '🧿', name: 'Absolute', rarity: 'rare', price: 8,
+    desc: 'Every end and joint scores its absolute value — cursed bones turn holy.' },
+  { id: 'keystone', icon: '🗿', name: 'Keystone', rarity: 'legendary', price: 16,
+    desc: '+1 chain slot while this sits on your shelf.' },
+
+  // --- the pip family: one charm per number, rarer at the top ---
+  { id: 'aces', icon: '🅰️', name: 'Ace High', rarity: 'uncommon', price: 6,
+    desc: 'Scored 1s count as 10s.' },
+  { id: 'deuce', icon: '✌️', name: 'Deuce Deuce', rarity: 'uncommon', price: 6,
+    desc: 'Joints touching a 2 score ×2.' },
+  { id: 'third', icon: '3️⃣', name: 'Third Degree', rarity: 'common', price: 4,
+    desc: '+15 for every 3 scored.' },
+  { id: 'four', icon: '4️⃣', name: 'Foursquare', rarity: 'uncommon', price: 5,
+    desc: 'Scored 4s count as 8s.' },
+  { id: 'five', icon: '🖐️', name: 'High Five', rarity: 'uncommon', price: 6,
+    desc: '+25 for every joint whose result is a multiple of 5.' },
+  { id: 'seven', icon: '7️⃣', name: 'Lucky Seven', rarity: 'rare', price: 8,
+    desc: 'Joints touching a 7 score ×2.' },
+  { id: 'eight', icon: '🎱', name: 'Crazy Eights', rarity: 'rare', price: 8,
+    desc: '+28 for every 8 scored.' },
+  { id: 'nine', icon: '☁️', name: 'Cloud Nine', rarity: 'rare', price: 8,
+    desc: 'Exposed ends showing 9 count as 99.' },
+
+  // --- post-scoring conditionals: effects that trigger after the chain lands ---
+  { id: 'bell', icon: '🔔', name: 'Encore Bell', rarity: 'uncommon', price: 5,
+    desc: 'Chains scoring 100 or more pay $2.' },
+  { id: 'phoenix', icon: '🪽', name: 'Phoenix Feather', rarity: 'rare', price: 8,
+    desc: 'Once per round, a chain scoring under 20 refunds its play.' },
+  { id: 'perfect', icon: '💠', name: 'Perfectionist', rarity: 'rare', price: 8,
+    desc: 'If every joint (2+) lands the same base value, the chain scores ×2.' },
+  { id: 'alch', icon: '⚗️', name: 'Alchemist', rarity: 'rare', price: 8,
+    desc: 'After a chain scores, 1-in-5 chance a played plain domino turns gold.' },
+  { id: 'collector', icon: '🧲', name: 'Collector', rarity: 'common', price: 4,
+    desc: 'Chains containing a double score +20.' },
+  { id: 'mirror', icon: '🪞', name: 'Mirror Mask', rarity: 'rare', price: 8,
+    desc: 'If the chain reads the same backwards, it scores ×2.' },
+
+  // --- flow & economy ---
+  { id: 'early', icon: '🐦', name: 'Early Bird', rarity: 'uncommon', price: 6,
+    desc: 'The first chain each round scores ×1.5.' },
+  { id: 'closer', icon: '🏁', name: 'The Closer', rarity: 'uncommon', price: 6,
+    desc: 'Chains played with your last play score ×1.5.' },
+  { id: 'countdown', icon: '⏬', name: 'Countdown', rarity: 'rare', price: 8,
+    desc: 'If pip values never increase left→right, the chain scores ×1.5.' },
+  { id: 'hook', icon: '🥊', name: 'Left Hook', rarity: 'common', price: 4,
+    desc: 'The first joint scores +15.' },
+  { id: 'anchor', icon: '⚓', name: 'Anchor', rarity: 'common', price: 4,
+    desc: 'The last joint scores +15.' },
+  { id: 'haggler', icon: '🤝', name: 'Haggler', rarity: 'uncommon', price: 6,
+    desc: 'Your first purchase in each shop costs $2 less.' },
+  { id: 'trust', icon: '🏦', name: 'Trust Fund', rarity: 'rare', price: 8,
+    desc: 'Interest pays $1 per $4 held instead of $5.' },
+  { id: 'scrap', icon: '♻️', name: 'Scrapper', rarity: 'common', price: 4,
+    desc: 'Shattered crystal dominoes pay $5.' },
+  { id: 'jeweler', icon: '💍', name: 'Jeweler', rarity: 'uncommon', price: 5,
+    desc: '+15 chain score for every gold domino played.' },
+  { id: 'sealk', icon: '🦭', name: 'Sealkeeper', rarity: 'uncommon', price: 5,
+    desc: '+12 chain score for every sealed domino played.' },
+  { id: 'grave', icon: '🪦', name: 'Grave Robber', rarity: 'uncommon', price: 5,
+    desc: 'Earn $1 for every negative pip scored.' },
+  { id: 'diver', icon: '🧤', name: 'Dumpster Diver', rarity: 'uncommon', price: 5,
+    desc: 'Chains score +10 for every discard used this round.' },
+
+  // --- new legendaries ---
+  { id: 'echo', icon: '📢', name: 'Echo Chamber', rarity: 'legendary', price: 15,
+    desc: 'Every joint retriggers — its base value scores again.' },
+  { id: 'house', icon: '🎰', name: 'House Edge', rarity: 'legendary', price: 15,
+    desc: 'The Wheels of Fortune always land on their jackpot.' },
 ];
 const MAX_CHARMS = 5;
 const has = (id) => S.charms.some((c) => c.id === id);
+// chain length: base (4, voucher-raised to 6) +1 while Keystone is shelved
+const effChainSize = () => Math.min(7, S.chainSize + (has('keystone') ? 1 : 0));
 
 /* ---------------- vouchers (the "Vouchers") ---------------- */
 const VOUCHERS = [
@@ -156,12 +275,19 @@ function startRound(round) {
   S.goal = goalFor(round, S.boss);
   S.playsLeft = S.boss && S.boss.id === 'heavy' ? 2 : S.playsMax;
   S.discardsLeft = S.discardsMax;
+  S.playsThisRound = 0;
+  S.discardsUsed = 0;
+  S.phoenixUsed = false;
   S.score = 0;
-  S.chain = Array(S.chainSize).fill(null);
+  S.chain = Array(effChainSize()).fill(null);
   S.drawPile = shuffle(S.pouch);
-  S.hand = S.drawPile.splice(0, S.handSize);
+  // amber-sealed dominoes are guaranteed in the opening hand
+  const ambers = S.drawPile.filter((d) => d.seal === 'amber').slice(0, S.handSize);
+  S.drawPile = S.drawPile.filter((d) => !ambers.includes(d));
+  S.hand = ambers.concat(S.drawPile.splice(0, S.handSize - ambers.length));
   S.discardMode = false;
   S.discardSel.clear();
+  animDeal = true;
   render();
 }
 
@@ -179,9 +305,12 @@ function refillHand() {
    power end (indices bind before multiplication — hence "rare").
    ===================================================================== */
 function effVal(v) {
-  return v === 0 && has('blank') ? 7 : v;
+  if (v === 0 && has('blank')) return 7;   // ⬜ Blank Slate
+  if (v === 1 && has('aces')) return 10;   // 🅰️ Ace High
+  if (v === 4 && has('four')) return 8;    // 4️⃣ Foursquare
+  return v;
 }
-function scoreChain(entries) {
+function scoreChain(entries, opts = {}) {
   const n = entries.length;
   const exprParts = [];
   const lines = []; // {label, amt} bonus rows for the breakdown
@@ -190,28 +319,58 @@ function scoreChain(entries) {
   let money = 0;
 
   const E = entries.map(ends);
-  const firstVal = effVal(E[0].l);
-  const lastVal = effVal(E[n - 1].r);
+
+  // resolve values: blank-slate 0→7, then wild ends copy the pip they touch.
+  // At a joint a wild copies the opposing end; two facing wilds resonate as
+  // 7s; an exposed wild copies its own domino's other end.
+  const res = E.map((e) => ({ l: effVal(e.l), r: effVal(e.r) }));
+  for (let i = 0; i < n - 1; i++) {
+    const aW = E[i].rWild, bW = E[i + 1].lWild;
+    if (aW && bW) { res[i].r = 7; res[i + 1].l = 7; }
+    else if (aW) res[i].r = res[i + 1].l;
+    else if (bW) res[i + 1].l = res[i].r;
+  }
+  if (E[0].lWild) res[0].l = E[0].rWild ? 7 : res[0].r;
+  if (E[n - 1].rWild) res[n - 1].r = E[n - 1].lWild ? 7 : res[n - 1].l;
+
+  const exprNum = (v) => (v < 0 ? `(${v})` : String(v));
+  const absify = (v, what) => {
+    if (has('abs') && v < 0) { lines.push({ label: `🧿 Absolute: ${what}`, amt: -2 * v }); return -v; }
+    return v;
+  };
+
+  let rawFirst = res[0].l;
+  let rawLast = res[n - 1].r;
+  if (has('nine') && rawFirst === 9) { lines.push({ label: '☁️ Cloud Nine: exposed 9 counts as 99', amt: 90 }); rawFirst = 99; }
+  if (has('nine') && rawLast === 9) { lines.push({ label: '☁️ Cloud Nine: exposed 9 counts as 99', amt: 90 }); rawLast = 99; }
+  const firstVal = absify(rawFirst, 'left end');
+  const lastVal = absify(rawLast, 'right end');
+
+  // every value the chain scores, in order — used by count/shape charms
+  const seq = [];
+  res.forEach((e) => { seq.push(e.l, e.r); });
+  const jointBases = [];
 
   // --- exposed left end ---
   let endL = firstVal;
-  exprParts.push(String(firstVal));
+  exprParts.push(exprNum(rawFirst));
   if (has('bookends')) { lines.push({ label: '📚 Bookends: left end ×4', amt: endL * 3 }); endL *= 4; }
   total += endL;
 
   // --- joints ---
   for (let i = 0; i < n - 1; i++) {
-    const a = effVal(E[i].r);
-    const b = effVal(E[i + 1].l);
+    const a = res[i].r;
+    const b = res[i + 1].l;
     const isPow = E[i].rOp === 'pow' || E[i + 1].lOp === 'pow';
     let v = isPow ? Math.pow(a, b) : a * b;
-    exprParts.push(`${a}${isPow ? '^' : '×'}${b}`);
+    exprParts.push(`${exprNum(a)}${isPow ? '^' : '×'}${exprNum(b)}`);
 
     if (S.boss && S.boss.id === 'censor' && i === 0) {
       lines.push({ label: '🤐 The Censor silences the first joint', amt: -v });
       jointVals.push(0);
       continue; // censored: no bonuses either
     }
+    v = absify(v, `joint ${i + 1}`);
     const base = v;
     // crystal material: each crystal participant doubles the joint
     let crystals = 0;
@@ -219,35 +378,91 @@ function scoreChain(entries) {
     if (entries[i + 1].d.material === 'crystal') crystals++;
     if (crystals) { const m = Math.pow(2, crystals); lines.push({ label: `💎 Crystal joint ×${m}`, amt: v * (m - 1) }); v *= m; }
     if (has('twin') && a === b) { lines.push({ label: '🔥 Twin Flame: matching joint ×2', amt: v }); v *= 2; }
+    if (has('deuce') && (a === 2 || b === 2)) { lines.push({ label: '✌️ Deuce Deuce: joint ×2', amt: v }); v *= 2; }
+    if (has('seven') && (a === 7 || b === 7)) { lines.push({ label: '7️⃣ Lucky Seven: joint ×2', amt: v }); v *= 2; }
+    if (has('center') && i === 1) { lines.push({ label: '🎪 Centerpiece: 2nd joint ×2', amt: v }); v *= 2; }
     if (has('even') && base % 2 === 0) { lines.push({ label: '⚖️ Even Steven', amt: 8 }); v += 8; }
     if (has('odd') && base % 2 === 1) { lines.push({ label: '🎭 Odd Rod', amt: 8 }); v += 8; }
+    if (has('five') && base !== 0 && base % 5 === 0) { lines.push({ label: '🖐️ High Five', amt: 25 }); v += 25; }
     if (has('sixth') && (a === 6 || b === 6)) { lines.push({ label: '🕕 Sixth Sense', amt: 10 }); v += 10; }
     if (has('momentum') && i > 0) { lines.push({ label: `🎢 Momentum (joint ${i + 1})`, amt: 4 * i }); v += 4 * i; }
+    if (has('hook') && i === 0) { lines.push({ label: '🥊 Left Hook', amt: 15 }); v += 15; }
+    if (has('anchor') && i === n - 2) { lines.push({ label: '⚓ Anchor', amt: 15 }); v += 15; }
+    // retriggers: ruby seals (per sealed participant) and Echo Chamber (all joints)
+    [entries[i], entries[i + 1]].forEach((e) => {
+      if (e.d.seal === 'ruby') { lines.push({ label: '🔴 Ruby Seal: joint retriggered', amt: base }); v += base; }
+    });
+    if (has('echo')) { lines.push({ label: '📢 Echo Chamber: joint retriggered', amt: base }); v += base; }
+    jointBases.push(base);
     jointVals.push(v);
     total += v;
   }
 
   // --- exposed right end ---
   let endR = lastVal;
-  exprParts.push(String(lastVal));
+  exprParts.push(exprNum(rawLast));
   if (has('bookends')) { lines.push({ label: '📚 Bookends: right end ×4', amt: endR * 3 }); endR *= 4; }
   total += endR;
 
   // --- chain-level effects ---
+  if (has('ouro')) {
+    const phantom = firstVal * lastVal;
+    lines.push({ label: '♾️ Ouroboros: phantom joint (ends multiplied)', amt: phantom });
+    total += phantom;
+  }
+  if (has('survey')) { lines.push({ label: '📏 Surveyor', amt: 5 * n }); total += 5 * n; }
   if (has('high') && jointVals.length) {
     const best = Math.max(...jointVals);
     lines.push({ label: '🎯 High Roller: best joint again', amt: best });
     total += best;
   }
   if (has('mini') && n === 3) { lines.push({ label: '🪶 Minimalist', amt: 40 }); total += 40; }
-  if (has('snake')) {
-    const seq = [];
-    E.forEach((e) => { seq.push(effVal(e.l), effVal(e.r)); });
-    if (seq.every((v, i) => i === 0 || seq[i - 1] <= v)) {
-      const bonus = total * 0.5;
-      lines.push({ label: '🐍 Snake Charmer: chain ×1.5', amt: bonus });
-      total += bonus;
-    }
+
+  // count charms: every scored value in seq participates
+  const threes = seq.filter((v) => v === 3).length;
+  if (has('third') && threes) { lines.push({ label: `3️⃣ Third Degree ×${threes}`, amt: 15 * threes }); total += 15 * threes; }
+  const eights = seq.filter((v) => v === 8).length;
+  if (has('eight') && eights) { lines.push({ label: `🎱 Crazy Eights ×${eights}`, amt: 28 * eights }); total += 28 * eights; }
+  if (has('collector') && entries.some((e) => e.d.a === e.d.b)) { lines.push({ label: '🧲 Collector: double in chain', amt: 20 }); total += 20; }
+  const goldCount = entries.filter((e) => e.d.material === 'gold').length;
+  if (has('jeweler') && goldCount) { lines.push({ label: `💍 Jeweler ×${goldCount}`, amt: 15 * goldCount }); total += 15 * goldCount; }
+  const sealedCount = entries.filter((e) => e.d.seal).length;
+  if (has('sealk') && sealedCount) { lines.push({ label: `🦭 Sealkeeper ×${sealedCount}`, amt: 12 * sealedCount }); total += 12 * sealedCount; }
+  if (has('diver') && (S.discardsUsed || 0) > 0) { lines.push({ label: `🧤 Dumpster Diver ×${S.discardsUsed}`, amt: 10 * S.discardsUsed }); total += 10 * S.discardsUsed; }
+
+  // shape & flow multipliers
+  if (has('snake') && seq.every((v, i) => i === 0 || seq[i - 1] <= v)) {
+    const bonus = total * 0.5;
+    lines.push({ label: '🐍 Snake Charmer: chain ×1.5', amt: bonus });
+    total += bonus;
+  }
+  if (has('countdown') && seq.every((v, i) => i === 0 || seq[i - 1] >= v)) {
+    const bonus = total * 0.5;
+    lines.push({ label: '⏬ Countdown: chain ×1.5', amt: bonus });
+    total += bonus;
+  }
+  if (has('mirror') && seq.length >= 4 && seq.join(',') === seq.slice().reverse().join(',')) {
+    lines.push({ label: '🪞 Mirror Mask: palindrome ×2', amt: total });
+    total *= 2;
+  }
+  if (has('perfect') && jointBases.length >= 2 && jointBases.every((v) => v === jointBases[0])) {
+    lines.push({ label: '💠 Perfectionist: all joints equal ×2', amt: total });
+    total *= 2;
+  }
+  if (has('early') && (S.playsThisRound || 0) === 0) {
+    const bonus = total * 0.5;
+    lines.push({ label: '🐦 Early Bird: first chain ×1.5', amt: bonus });
+    total += bonus;
+  }
+  if (has('closer') && S.playsLeft === 1) {
+    const bonus = total * 0.5;
+    lines.push({ label: '🏁 The Closer: last play ×1.5', amt: bonus });
+    total += bonus;
+  }
+  // rolled only when a chain is actually played, never in the preview
+  if (has('dice') && opts.roll && Math.random() < 1 / 3) {
+    lines.push({ label: '🎲 Loaded Dice: chain ×2!', amt: total });
+    total *= 2;
   }
   total = Math.round(total);
 
@@ -255,9 +470,15 @@ function scoreChain(entries) {
   const shattered = [];
   entries.forEach((e) => {
     if (e.d.material === 'gold') money++;
+    if (e.d.seal === 'gold') money += 2;
     if (has('digger') && e.d.a === e.d.b) money++;
-    if (e.d.material === 'crystal' && !has('ball') && Math.random() < 0.25) shattered.push(e.d);
+    if (e.d.material === 'crystal' && !has('ball') && Math.random() < 0.25) {
+      shattered.push(e.d);
+      if (has('scrap')) money += 5; // ♻️ Scrapper
+    }
   });
+  if (has('bell') && total >= 100) money += 2;                     // 🔔 Encore Bell
+  if (has('grave')) money += seq.filter((v) => v < 0).length;      // 🪦 Grave Robber
 
   return { total, expr: exprParts.join(' + '), lines, money, shattered };
 }
@@ -267,10 +488,16 @@ function scoreChain(entries) {
    ===================================================================== */
 const PIP_CELLS = { 0: [], 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
-function halfEl(val, op, side) {
+function halfEl(val, op, side, wild) {
   const half = document.createElement('div');
   half.className = `half ${side}`;
-  if (val <= 6) {
+  if (wild) {
+    const num = document.createElement('div');
+    num.className = 'numval wild';
+    num.textContent = '★';
+    num.title = 'Wild end: copies the pip value it touches';
+    half.appendChild(num);
+  } else if (val >= 0 && val <= 6) {
     for (let cell = 0; cell < 9; cell++) {
       const spot = document.createElement('div');
       if (PIP_CELLS[val].includes(cell)) spot.className = 'pip';
@@ -279,7 +506,7 @@ function halfEl(val, op, side) {
     }
   } else {
     const num = document.createElement('div');
-    num.className = 'numval';
+    num.className = 'numval' + (val < 0 ? ' neg' : '');
     num.textContent = val;
     half.appendChild(num);
   }
@@ -298,8 +525,15 @@ function dominoEl(d, { flipped = false, small = false } = {}) {
   el.className = 'domino' + (small ? ' small' : '') + (d.material !== 'plain' ? ` mat-${d.material}` : '');
   const l = flipped ? d.b : d.a, r = flipped ? d.a : d.b;
   const lOp = flipped ? d.bOp : d.aOp, rOp = flipped ? d.aOp : d.bOp;
-  el.appendChild(halfEl(l, lOp, 'left'));
-  el.appendChild(halfEl(r, rOp, 'right'));
+  const lW = flipped ? d.bWild : d.aWild, rW = flipped ? d.aWild : d.bWild;
+  el.appendChild(halfEl(l, lOp, 'left', lW));
+  el.appendChild(halfEl(r, rOp, 'right', rW));
+  if (d.seal) {
+    const dot = document.createElement('span');
+    dot.className = `seal-dot seal-${d.seal}`;
+    dot.title = `${SEALS[d.seal].name}: ${SEALS[d.seal].desc}`;
+    el.appendChild(dot);
+  }
   return el;
 }
 
@@ -318,6 +552,7 @@ function render() {
   $('hud-discards').textContent = S.discardsLeft;
   $('hud-pouch').textContent = S.pouch.length;
   $('goalbar-fill').style.width = Math.min(100, (S.score / S.goal) * 100) + '%';
+  $('goalbar-fill').classList.toggle('goal-met', S.score >= S.goal);
 
   const bb = $('boss-banner');
   if (S.boss) {
@@ -366,12 +601,32 @@ function renderChain() {
       dEl.style.cursor = 'pointer';
       dEl.title = 'Tap to flip';
       dEl.onclick = () => flipSlot(i);
+      if (animPop === i) dEl.classList.add('placed-pop');
+      if (animFlip === i) dEl.classList.add('flip-anim');
       slot.appendChild(dEl);
     } else {
       slot.textContent = i === 0 ? 'start' : '· · ·';
     }
+    // operator connector between adjacent slots, showing × or ^ live
+    if (i < S.chain.length - 1) {
+      const conn = document.createElement('span');
+      const nxt = S.chain[i + 1];
+      if (entry && nxt) {
+        const isPow = ends(entry).rOp === 'pow' || ends(nxt).lOp === 'pow';
+        conn.className = 'chain-op' + (isPow ? ' pow' : '');
+        conn.textContent = isPow ? '^' : '×';
+      } else {
+        conn.className = 'chain-op dim';
+        conn.textContent = '·';
+      }
+      area.appendChild(slot);
+      area.appendChild(conn);
+      return;
+    }
     area.appendChild(slot);
   });
+  animPop = null;
+  animFlip = null;
 
   const placed = S.chain.filter(Boolean).length;
   $('btn-play').disabled = placed < 2 || S.playsLeft <= 0;
@@ -381,8 +636,12 @@ function renderChain() {
 function renderHand() {
   const handEl = $('hand');
   handEl.innerHTML = '';
-  S.hand.forEach((d) => {
+  S.hand.forEach((d, idx) => {
     const el = dominoEl(d);
+    if (animDeal) {
+      el.classList.add('deal-in');
+      el.style.animationDelay = `${idx * 55}ms`;
+    }
     if (S.discardMode) {
       if (S.discardSel.has(d.id)) el.classList.add('sel-discard');
       el.onclick = () => toggleDiscardSel(d.id);
@@ -391,6 +650,7 @@ function renderHand() {
     }
     handEl.appendChild(el);
   });
+  animDeal = false;
 
   $('btn-discard').classList.toggle('hidden', S.discardMode);
   $('btn-discard').disabled = S.discardsLeft <= 0 || S.hand.length === 0;
@@ -425,6 +685,7 @@ function placeFromHand(id) {
   if (hi === -1) return;
   const [d] = S.hand.splice(hi, 1);
   S.chain[slotIdx] = { d, flipped: false };
+  animPop = slotIdx;
   render();
 }
 
@@ -443,12 +704,13 @@ function flipSlot(slotIdx) {
   const entry = S.chain[slotIdx];
   if (!entry) return;
   entry.flipped = !entry.flipped;
+  animFlip = slotIdx;
   render();
 }
 
 function clearChain() {
   S.chain.forEach((entry) => { if (entry) S.hand.push(entry.d); });
-  S.chain = Array(S.chainSize).fill(null);
+  S.chain = Array(S.chain.length).fill(null);
   render();
 }
 
@@ -467,6 +729,7 @@ function confirmDiscard() {
   if (S.discardSel.size === 0) return;
   S.hand = S.hand.filter((d) => !S.discardSel.has(d.id));
   S.discardsLeft--;
+  S.discardsUsed++;
   S.discardMode = false;
   S.discardSel.clear();
   refillHand();
@@ -477,18 +740,37 @@ function playChain() {
   const entries = S.chain.filter(Boolean);
   if (entries.length < 2 || S.playsLeft <= 0) return;
 
-  const r = scoreChain(entries);
+  const r = scoreChain(entries, { roll: true });
   S.playsLeft--;
+  S.playsThisRound++;
   S.score += r.total;
   S.bestChain = Math.max(S.bestChain, r.total);
   if (r.money > 0) { S.money += r.money; }
   r.shattered.forEach((d) => {
     S.pouch = S.pouch.filter((p) => p.id !== d.id);
   });
+  // post-scoring conditionals
+  if (has('phoenix') && !S.phoenixUsed && r.total < 20) {
+    S.phoenixUsed = true;
+    S.playsLeft++;
+    toast('🪽 Phoenix Feather refunds the play');
+  }
+  if (has('alch') && Math.random() < 0.2) {
+    const cands = entries.map((e) => e.d).filter((d) => d.material === 'plain' && !r.shattered.includes(d));
+    if (cands.length) {
+      const d = pick(cands);
+      d.material = 'gold';
+      toast(`⚗️ Alchemist transmutes (${d.a}|${d.b}) to gold!`);
+    }
+  }
 
-  // consume played dominoes for the round
-  S.chain = Array(S.chainSize).fill(null);
+  // consume played dominoes for the round — but azure-sealed ones come home
+  entries.forEach((e) => {
+    if (e.d.seal === 'azure' && !r.shattered.includes(e.d)) S.hand.push(e.d);
+  });
+  S.chain = Array(S.chain.length).fill(null);
   refillHand();
+  animDeal = true;
 
   showBreakdown(r);
 }
@@ -497,26 +779,20 @@ function showBreakdown(r) {
   $('bd-expr').textContent = r.expr;
   const linesEl = $('bd-lines');
   linesEl.innerHTML = '';
-  r.lines.forEach((ln) => {
+  let rowIdx = 0;
+  const addRow = (left, right) => {
     const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<span>${ln.label}</span><span>${ln.amt >= 0 ? '+' : ''}${fmt(ln.amt)}</span>`;
+    row.className = 'row bd-row-in';
+    row.style.animationDelay = `${rowIdx * 90}ms`;
+    rowIdx++;
+    row.innerHTML = `<span>${left}</span><span>${right}</span>`;
     linesEl.appendChild(row);
-  });
-  if (r.money > 0) {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<span>💰 Earnings</span><span>+$${r.money}</span>`;
-    linesEl.appendChild(row);
-  }
-  r.shattered.forEach((d) => {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<span>💥 Crystal (${d.a}|${d.b}) shattered!</span><span></span>`;
-    linesEl.appendChild(row);
-  });
-  $('bd-total').textContent = fmt(r.total);
+  };
+  r.lines.forEach((ln) => addRow(ln.label, `${ln.amt >= 0 ? '+' : ''}${fmt(ln.amt)}`));
+  if (r.money > 0) addRow('💰 Earnings', `+$${r.money}`);
+  r.shattered.forEach((d) => addRow(`💥 Crystal (${d.a}|${d.b}) shattered!`, ''));
   $('modal-breakdown').classList.remove('hidden');
+  tweenNumber($('bd-total'), r.total, 800);
 }
 
 function afterBreakdown() {
@@ -535,16 +811,57 @@ function afterBreakdown() {
 /* =====================================================================
    ROUND END / ECONOMY
    ===================================================================== */
+// Skip-the-shop tags, Balatro skip-blind style: forgo the Bazaar for a prize
+function rollSkipOffer() {
+  const opts = [
+    { id: 'cash', label: '💰 Windfall Tag: +$10' },
+    { id: 'charm', label: '🎗️ Charm Tag: a free random charm' },
+    { id: 'smith', label: '🔨 Smith Tag: two random dominoes get +1/+1' },
+  ];
+  let o = pick(opts);
+  if (o.id === 'charm' && S.charms.length >= MAX_CHARMS) o = opts[0];
+  return o;
+}
+
+function applySkipOffer() {
+  const o = S.skipOffer;
+  if (o.id === 'cash') { S.money += 10; toast('💰 +$10'); }
+  else if (o.id === 'charm') {
+    const pool = CHARMS.filter((c) => !S.charms.some((x) => x.id === c.id));
+    const c = weightedCharms(pool, 1)[0];
+    if (c) { S.charms.push(c); toast(`${c.icon} ${c.name} joins your shelf!`); }
+    else { S.money += 10; toast('💰 +$10 (no charms left)'); }
+  } else if (o.id === 'smith') {
+    for (let k = 0; k < 2; k++) {
+      const eligible = S.pouch.filter((d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'));
+      if (!eligible.length) break;
+      const d = pick(eligible);
+      if (canPipEnd(d, 'a')) d.a += 1;
+      if (canPipEnd(d, 'b')) d.b += 1;
+      toast(`🔨 (${d.a}|${d.b}) upgraded`);
+    }
+  }
+  $('overlay-roundend').classList.add('hidden');
+  startRound(S.round + 1);
+}
+
 function winRound() {
   const base = 4;
   const playBonus = S.playsLeft;
-  const interest = Math.min(S.interestCap, Math.floor(S.money / 5));
+  const perDollar = has('trust') ? 4 : 5; // 🏦 Trust Fund
+  const interest = Math.min(S.interestCap, Math.floor(S.money / perDollar));
+  const piggy = has('piggy') ? S.discardsLeft : 0;
+  const bounty = S.boss ? 4 : 0;
   const rows = [
     ['Round cleared', `$${base}`],
     [`Unused plays ×${playBonus}`, `$${playBonus}`],
-    [`Interest ($1 per $5, cap $${S.interestCap})`, `$${interest}`],
+    [`Interest ($1 per $${perDollar}, cap $${S.interestCap})`, `$${interest}`],
   ];
-  S.money += base + playBonus + interest;
+  if (piggy) rows.push([`🐷 Piggy Bank: unused discards ×${S.discardsLeft}`, `$${piggy}`]);
+  if (bounty) rows.push(['👑 Boss bounty', `$${bounty}`]);
+  S.money += base + playBonus + interest + piggy + bounty;
+  S.skipOffer = rollSkipOffer();
+  $('btn-skip-shop').textContent = `Skip the Bazaar — ${S.skipOffer.label}`;
   $('re-round').textContent = S.round;
   const bd = $('re-breakdown');
   bd.innerHTML = '';
@@ -577,22 +894,259 @@ function gameOver(reason) {
    ===================================================================== */
 function randomShopDomino() {
   const roll = Math.random();
-  const material = roll < 0.15 ? 'gold' : roll < 0.3 ? 'crystal' : 'plain';
+  if (roll < 0.12) {
+    // cursed bone: big pips, but at least one end is negative
+    const a = -(1 + rand(9));
+    const b = rand(2) ? 1 + rand(9) : -(1 + rand(9));
+    return { d: makeDomino(a, b), price: 1 };
+  }
+  const material = roll < 0.26 ? 'gold' : roll < 0.4 ? 'crystal' : 'plain';
   const d = makeDomino(rand(7), rand(7), { material });
   const price = 3 + (material === 'plain' ? 0 : 3) + (d.a + d.b >= 9 ? 1 : 0);
   return { d, price };
 }
 
+// rarity-weighted sampling without replacement. Steep on purpose: per shop
+// slot a rare is ~1-in-15 and a legendary ~1-in-100 — the Arcana and Royal
+// wheels are the intended (gambled) route to the top tiers.
+const RARITY_WEIGHT = { common: 10, uncommon: 4, rare: 1, legendary: 0.15 };
+function weightedCharms(pool, n) {
+  const p = pool.slice();
+  const out = [];
+  while (out.length < n && p.length) {
+    const totalW = p.reduce((s, c) => s + RARITY_WEIGHT[c.rarity], 0);
+    let r = Math.random() * totalW;
+    let idx = 0;
+    for (; idx < p.length - 1; idx++) {
+      r -= RARITY_WEIGHT[p[idx].rarity];
+      if (r <= 0) break;
+    }
+    out.push(p.splice(idx, 1)[0]);
+  }
+  return out;
+}
+
 function generateShop() {
   const owned = new Set(S.charms.map((c) => c.id));
-  const charmPool = shuffle(CHARMS.filter((c) => !owned.has(c.id)));
+  const charmPool = CHARMS.filter((c) => !owned.has(c.id));
   const voucherPool = shuffle(VOUCHERS.filter((v) => v.can()));
   S.shop = {
-    charms: charmPool.slice(0, 2).map((c) => ({ c, sold: false })),
+    charms: weightedCharms(charmPool, 2).map((c) => ({ c, sold: false })),
     dominoes: [randomShopDomino(), randomShopDomino()].map((o) => ({ ...o, sold: false })),
     voucher: voucherPool.length ? { v: voucherPool[0], sold: false } : null,
-    powerBrush: Math.random() < 0.35, // rare service: only sometimes in stock
-    services: { pip: false, pip1: false, dup: false, cull: false, brush: false }, // sold flags
+    royal: Math.random() < 0.25, // the legendary wheel is only sometimes wheeled in
+    spun: {},                    // wheelId -> true once spun this shop
+    services: { pip: false, cull: false }, // targeted workbench sold flags
+  };
+}
+
+/* ---------------- wheels of fortune ----------------
+   The old à-la-carte services are repackaged as pay-to-spin wheels:
+   you buy the spin, the wheel decides the prize. Targeted play survives
+   only as Pip Up and Cull on the workbench. */
+function housePays(n) { S.money += n; toast(`🏦 No valid target — the house pays $${n}`); renderShop(); }
+
+function grantCharmOfRarity(rarity) {
+  const pool = CHARMS.filter((c) => c.rarity === rarity && !S.charms.some((x) => x.id === c.id));
+  if (!pool.length || S.charms.length >= MAX_CHARMS) return false;
+  const c = pick(pool);
+  S.charms.push(c);
+  toast(`${c.icon} ${c.name} joins your shelf!`);
+  return true;
+}
+
+function wheelPipUp() {
+  if (!S.pouch.some((d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'))) return housePays(3);
+  pickDomino('Prize: Pip Up', 'Non-legendary ends gain +1 pip (cancelling forfeits the prize)',
+    (d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'), (d) => {
+      if (canPipEnd(d, 'a')) d.a += 1;
+      if (canPipEnd(d, 'b')) d.b += 1;
+      toast(`Upgraded to (${d.a}|${d.b})`);
+      renderShop();
+    });
+}
+function wheelPrecision() {
+  if (!S.pouch.some((d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'))) return housePays(2);
+  pickEnd('Prize: Precision Pip — tap the end to upgrade', canPipEnd, (d, end) => {
+    d[end] += 1;
+    toast(`Upgraded to (${d.a}|${d.b})`);
+    renderShop();
+  });
+}
+function wheelCull() {
+  if (S.pouch.length <= 8) return housePays(3);
+  pickDomino('Prize: Cull', 'Remove one domino for good', () => true, (d) => {
+    S.pouch = S.pouch.filter((p) => p.id !== d.id);
+    toast(`Removed (${d.a}|${d.b})`);
+    renderShop();
+  });
+}
+function wheelDuplicate() {
+  const offer = shuffle(S.pouch.filter((d) => !isLegendaryMod(d))).slice(0, 10);
+  if (!offer.length) return housePays(4);
+  pickDomino('Prize: Duplicate — the pouch offers 10', 'A copy of your pick joins the pouch', () => true, (d) => {
+    S.pouch.push(makeDomino(d.a, d.b, { material: d.material, seal: d.seal }));
+    toast(`Duplicated (${d.a}|${d.b})`);
+    renderShop();
+  }, offer);
+}
+function wheelGild() {
+  if (!S.pouch.some((d) => d.material === 'plain')) return housePays(4);
+  pickDomino('JACKPOT: Gild a domino', 'It will pay $1 whenever it is played', (d) => d.material === 'plain', (d) => {
+    d.material = 'gold';
+    toast(`(${d.a}|${d.b}) turns to gold!`);
+    renderShop();
+  });
+}
+function wheelCrystallize() {
+  if (!S.pouch.some((d) => d.material === 'plain')) return housePays(4);
+  pickDomino('Prize: Crystallize', 'Its joints double — but it may shatter', (d) => d.material === 'plain', (d) => {
+    d.material = 'crystal';
+    toast(`(${d.a}|${d.b}) turns to crystal!`);
+    renderShop();
+  });
+}
+function wheelSeal() {
+  const color = pick(Object.keys(SEALS));
+  const sd = SEALS[color];
+  if (!S.pouch.some((d) => !d.seal && !isLegendaryMod(d))) return housePays(4);
+  pickDomino(`Prize: ${sd.icon} ${sd.name}`, sd.desc, (d) => !d.seal && !isLegendaryMod(d), (d) => {
+    d.seal = color;
+    toast(`(${d.a}|${d.b}) sealed!`);
+    renderShop();
+  });
+}
+function wheelBonePack() {
+  const pack = [randomShopDomino().d, randomShopDomino().d, randomShopDomino().d];
+  pickDomino('Prize: Bone Pack — keep one', 'The other two are lost', () => true, (d) => {
+    S.pouch.push(d);
+    toast(`(${d.a}|${d.b}) joins your pouch`);
+    renderShop();
+  }, pack);
+}
+function wheelCursedGift() {
+  const a = -(1 + rand(9));
+  const b = rand(2) ? 1 + rand(9) : -(1 + rand(9));
+  S.pouch.push(makeDomino(a, b));
+  S.money += 3;
+  toast(`💀 A cursed (${a}|${b}) sneaks into your pouch (+$3 pity)`);
+  renderShop();
+}
+function wheelPowerBrush() {
+  if (!S.pouch.some((d) => !isLegendaryMod(d))) return housePays(6);
+  pickEnd('JACKPOT: Power Brush — tap the end to empower', (d) => !isLegendaryMod(d), (d, end) => {
+    d[end + 'Op'] = 'pow';
+    toast(`(${d.a}|${d.b}) now carries a power end!`);
+    renderShop();
+  });
+}
+function wheelChamBrush() {
+  if (!S.pouch.some((d) => !isLegendaryMod(d))) return housePays(6);
+  pickEnd('JACKPOT: Chameleon Brush — tap the end to make wild', (d) => !isLegendaryMod(d), (d, end) => {
+    d[end + 'Wild'] = true;
+    toast('A wild end joins your pouch!');
+    renderShop();
+  });
+}
+function wheelBrushRandom() { (rand(2) ? wheelPowerBrush : wheelChamBrush)(); }
+function wheelCharm(rarity, refund) {
+  if (!grantCharmOfRarity(rarity)) return housePays(refund);
+  renderShop();
+}
+
+const WHEELS = [
+  { id: 'tinker', icon: '🔨', name: 'Tinker Wheel', price: 3,
+    desc: 'Everyday pouch work — pips, culls, copies… and a golden jackpot.',
+    outcomes: [
+      { icon: '🔨', label: 'Pip Up: +1/+1 to a chosen domino', w: 35, run: wheelPipUp },
+      { icon: '🔧', label: 'Precision Pip: +1 to a chosen end', w: 25, run: wheelPrecision },
+      { icon: '🗑️', label: 'Cull: remove a chosen domino', w: 15, run: wheelCull },
+      { icon: '🪞', label: 'Duplicate: copy 1 of 10 random', w: 15, run: wheelDuplicate },
+      { icon: '✨', label: 'JACKPOT — gild a chosen domino', w: 10, run: wheelGild },
+    ], jackpot: 4 },
+  { id: 'mystic', icon: '🔮', name: 'Mystic Wheel', price: 6,
+    desc: 'Seals, materials and stranger things.',
+    outcomes: [
+      { icon: '🔴', label: 'A random seal on a chosen domino', w: 45, run: wheelSeal },
+      { icon: '💎', label: 'Crystallize a chosen domino', w: 20, run: wheelCrystallize },
+      { icon: '🎁', label: 'Bone Pack: 3 bones, keep 1', w: 20, run: wheelBonePack },
+      { icon: '💀', label: 'A cursed bone sneaks in (+$3 pity)', w: 10, run: wheelCursedGift },
+      { icon: '⚡', label: 'JACKPOT — a legendary brush', w: 5, run: wheelBrushRandom },
+    ], jackpot: 4 },
+  { id: 'arcana', icon: '🎴', name: 'Arcana Wheel', price: 8,
+    desc: 'Charms of shifting rarity.',
+    outcomes: [
+      { icon: '⚪', label: 'A random common charm', w: 55, run: () => wheelCharm('common', 4) },
+      { icon: '🟢', label: 'A random uncommon charm', w: 30, run: () => wheelCharm('uncommon', 5) },
+      { icon: '🟣', label: 'A random rare charm', w: 12, run: () => wheelCharm('rare', 6) },
+      { icon: '🌟', label: 'JACKPOT — a LEGENDARY charm', w: 3, run: () => wheelCharm('legendary', 8) },
+    ], jackpot: 3 },
+  { id: 'royal', icon: '👑', name: 'Royal Wheel', price: 15, rarity: 'legendary',
+    desc: 'Legendary or bust. Rarely wheeled into the Bazaar.',
+    outcomes: [
+      { icon: '⚡', label: 'Power Brush: one end becomes ^', w: 30, run: wheelPowerBrush },
+      { icon: '🦎', label: 'Chameleon Brush: one end goes wild', w: 30, run: wheelChamBrush },
+      { icon: '🌟', label: 'A random LEGENDARY charm', w: 15, run: () => wheelCharm('legendary', 10) },
+      { icon: '💸', label: 'Bust — the house pays $5', w: 25, run: () => housePays(5) },
+    ], jackpot: 2 },
+];
+
+function spinWheel(wheel) {
+  if (S.shop.spun[wheel.id]) return;
+  if (!spend(wheel.price)) return;
+  S.shop.spun[wheel.id] = true;
+  let idx;
+  if (has('house')) {
+    idx = wheel.jackpot; // 🎰 House Edge: rigged in your favour
+  } else {
+    const totalW = wheel.outcomes.reduce((s, o) => s + o.w, 0);
+    let r = Math.random() * totalW;
+    idx = 0;
+    for (; idx < wheel.outcomes.length - 1; idx++) {
+      r -= wheel.outcomes[idx].w;
+      if (r <= 0) break;
+    }
+  }
+  renderShop();
+  openWheelModal(wheel, idx);
+}
+
+function openWheelModal(wheel, winIdx) {
+  $('wheel-title').textContent = `${wheel.icon} ${wheel.name}`;
+  const box = $('wheel-outcomes');
+  box.innerHTML = '';
+  wheel.outcomes.forEach((o) => {
+    const el = document.createElement('div');
+    el.className = 'wheel-chip';
+    el.innerHTML = `<span class="wc-icon">${o.icon}</span><span class="wc-label">${o.label}</span><span class="wheel-odds">${o.w}%</span>`;
+    box.appendChild(el);
+  });
+  const chips = [...box.children];
+  const claim = $('btn-wheel-claim');
+  claim.disabled = true;
+  claim.textContent = 'Spinning…';
+  $('modal-wheel').classList.remove('hidden');
+
+  // decelerating highlight: 3 laps then land on the rolled prize
+  const n = chips.length;
+  const total = 3 * n + winIdx + 1;
+  let i = 0;
+  const tick = () => {
+    chips.forEach((c) => c.classList.remove('hl'));
+    chips[i % n].classList.add('hl');
+    i++;
+    if (i < total) {
+      setTimeout(tick, 70 + Math.pow(i / total, 2) * 300);
+    } else {
+      chips[winIdx].classList.add('won');
+      claim.disabled = false;
+      claim.textContent = 'Claim Prize';
+    }
+  };
+  setTimeout(tick, 200);
+  claim.onclick = () => {
+    $('modal-wheel').classList.add('hidden');
+    wheel.outcomes[winIdx].run();
   };
 }
 
@@ -605,6 +1159,15 @@ function openShop() {
 }
 
 function spend(cost) {
+  // 🤝 Haggler: first purchase in each shop is $2 cheaper
+  if (has('haggler') && S.shop && !S.shop.haggled && cost > 1) {
+    const discounted = Math.max(1, cost - 2);
+    if (S.money < discounted) { toast('Not enough money'); return false; }
+    S.shop.haggled = true;
+    S.money -= discounted;
+    toast('🤝 Haggler talks them down $2');
+    return true;
+  }
   if (S.money < cost) { toast('Not enough money'); return false; }
   S.money -= cost;
   return true;
@@ -626,7 +1189,7 @@ function renderShop() {
     body.appendChild(sec);
     return row;
   };
-  const item = (row, { name, desc, price, rarity, sold, disabled, onBuy, dominoNode }) => {
+  const item = (row, { name, desc, price, rarity, sold, disabled, onBuy, dominoNode, btnLabel }) => {
     const el = document.createElement('div');
     el.className = 'shop-item' + (sold ? ' sold' : '');
     if (rarity) {
@@ -646,7 +1209,7 @@ function renderShop() {
     el.appendChild(ds);
     const btn = document.createElement('button');
     btn.className = 'btn btn-small btn-gold';
-    btn.textContent = sold ? 'Sold' : `Buy $${price}`;
+    btn.textContent = sold ? 'Sold' : (btnLabel || `Buy $${price}`);
     btn.disabled = sold || disabled || S.money < price;
     btn.onclick = onBuy;
     el.appendChild(btn);
@@ -692,7 +1255,8 @@ function renderShop() {
   // --- dominoes ---
   const domRow = section('Fresh Bones');
   S.shop.dominoes.forEach((offer) => {
-    const matName = offer.d.material === 'plain' ? '' : offer.d.material === 'gold' ? 'Gold — pays $1 when played. ' : 'Crystal — doubles its joints, may shatter. ';
+    let matName = offer.d.material === 'plain' ? '' : offer.d.material === 'gold' ? 'Gold — pays $1 when played. ' : 'Crystal — doubles its joints, may shatter. ';
+    if (offer.d.a < 0 || offer.d.b < 0) matName = 'CURSED — negative pips subtract… unless you go Absolute. ';
     item(domRow, {
       name: `Domino (${offer.d.a}|${offer.d.b})`,
       desc: matName + 'Added to your pouch.',
@@ -707,59 +1271,38 @@ function renderShop() {
     });
   });
 
-  // --- services ---
+  // --- wheels of fortune ---
+  const wheelRow = section('Wheels of Fortune — pay to spin, the wheel picks the prize');
+  WHEELS.forEach((w) => {
+    if (w.id === 'royal' && !S.shop.royal) return;
+    item(wheelRow, {
+      name: `${w.icon} ${w.name}`, desc: w.desc, price: w.price,
+      rarity: w.rarity, sold: !!S.shop.spun[w.id],
+      btnLabel: `Spin $${w.price}`,
+      onBuy: () => spinWheel(w),
+    });
+  });
+
+  // --- workbench: the only two targeted services left ---
   const svcRow = section('Workbench');
   item(svcRow, {
-    name: '🔨 Pip Up', desc: '+1 pip to BOTH ends of a chosen domino (max 9).', price: 3,
+    name: '🔨 Pip Up', desc: '+1 pip to BOTH ends of a chosen domino (max 9). Legendary ends are locked.', price: 4,
     sold: S.shop.services.pip,
-    onBuy: () => pickDomino('Pip Up: choose a domino', 'Both ends gain +1 pip', (d) => d.a < 9 || d.b < 9, (d) => {
-      if (!spend(3)) return;
-      d.a = Math.min(9, d.a + 1); d.b = Math.min(9, d.b + 1);
+    onBuy: () => pickDomino('Pip Up: choose a domino', 'Non-legendary ends gain +1 pip',
+      (d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'), (d) => {
+      if (!spend(4)) return;
+      if (canPipEnd(d, 'a')) d.a += 1;
+      if (canPipEnd(d, 'b')) d.b += 1;
       S.shop.services.pip = true;
       toast(`Upgraded to (${d.a}|${d.b})`);
       renderShop();
     }),
   });
   item(svcRow, {
-    name: '🔧 Precision Pip', desc: '+1 pip to ONE chosen end (max 9).', price: 2,
-    sold: S.shop.services.pip1,
-    onBuy: () => pickEnd('Precision Pip: tap the end to upgrade', (d, end) => d[end] < 9, (d, end) => {
-      if (!spend(2)) return;
-      d[end] = Math.min(9, d[end] + 1);
-      S.shop.services.pip1 = true;
-      toast(`Upgraded to (${d.a}|${d.b})`);
-      renderShop();
-    }),
-  });
-  if (S.shop.powerBrush) {
-    item(svcRow, {
-      name: '⚡ Power Brush', desc: 'RARE: convert one end from × to ^. Joints touching it score a^b.', price: 8,
-      rarity: 'rare', sold: S.shop.services.brush,
-      onBuy: () => pickEnd('Power Brush: tap the end to empower', (d, end) => d[end + 'Op'] !== 'pow', (d, end) => {
-        if (!spend(8)) return;
-        d[end + 'Op'] = 'pow';
-        S.shop.services.brush = true;
-        toast(`(${d.a}|${d.b}) now carries a power end!`);
-        renderShop();
-      }),
-    });
-  }
-  item(svcRow, {
-    name: '🪞 Duplicate', desc: 'Add an exact copy of a chosen domino to your pouch.', price: 5,
-    sold: S.shop.services.dup,
-    onBuy: () => pickDomino('Duplicate: choose a domino', 'A copy joins your pouch', () => true, (d) => {
-      if (!spend(5)) return;
-      S.pouch.push(makeDomino(d.a, d.b, { aOp: d.aOp, bOp: d.bOp, material: d.material }));
-      S.shop.services.dup = true;
-      toast(`Duplicated (${d.a}|${d.b})`);
-      renderShop();
-    }),
-  });
-  item(svcRow, {
-    name: '🗑️ Cull', desc: 'Remove a domino from your pouch for good (min pouch 8).', price: 3,
+    name: '🗑️ Cull', desc: 'Remove a domino from your pouch for good (min pouch 8).', price: 4,
     sold: S.shop.services.cull, disabled: S.pouch.length <= 8,
     onBuy: () => pickDomino('Cull: choose a domino to remove', 'Gone forever — a thinner pouch draws better', () => true, (d) => {
-      if (!spend(3)) return;
+      if (!spend(4)) return;
       S.pouch = S.pouch.filter((p) => p.id !== d.id);
       S.shop.services.cull = true;
       toast(`Removed (${d.a}|${d.b})`);
@@ -804,10 +1347,10 @@ function closePicker() {
   $('modal-picker').classList.add('hidden');
   pickerCb = null;
 }
-function pickDomino(title, sub, eligible, cb) {
+function pickDomino(title, sub, eligible, cb, list) {
   openPicker(title, sub);
   const grid = $('picker-grid');
-  S.pouch.forEach((d) => {
+  (list || S.pouch).forEach((d) => {
     const el = dominoEl(d, { small: true });
     if (eligible(d)) {
       el.onclick = () => { closePicker(); cb(d); };
@@ -869,6 +1412,7 @@ function bind() {
   $('btn-discard-confirm').onclick = confirmDiscard;
 
   $('btn-to-shop').onclick = openShop;
+  $('btn-skip-shop').onclick = applySkipOffer;
   $('btn-reroll').onclick = rerollShop;
   $('btn-next-round').onclick = () => {
     $('overlay-shop').classList.add('hidden');
@@ -894,4 +1438,4 @@ bind();
 showMenu();
 
 // debug/testing hook (harmless in production)
-window.__CB = { getState: () => S, scoreChain, makeDomino, startRound, render };
+window.__CB = { getState: () => S, scoreChain, makeDomino, startRound, render, CHARMS };
