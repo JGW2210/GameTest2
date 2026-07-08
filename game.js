@@ -25,6 +25,22 @@ function fmt(n) {
   if (Math.abs(n) >= 10000) return Math.round(n).toLocaleString('en-US');
   return String(Math.round(n * 100) / 100);
 }
+// transient animation flags, consumed by the next render
+let animDeal = false;   // stagger-deal the hand
+let animPop = null;     // chain slot index that just received a domino
+let animFlip = null;    // chain slot index that just flipped
+
+function tweenNumber(el, to, ms = 700) {
+  const t0 = performance.now();
+  const step = (t) => {
+    const p = Math.min(1, (t - t0) / ms);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(to * eased);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function toast(msg) {
   const el = document.createElement('div');
   el.className = 'toast';
@@ -101,7 +117,7 @@ const CHARMS = [
     desc: 'Your highest-scoring joint is counted twice.' },
   { id: 'mini', icon: '🪶', name: 'Minimalist', rarity: 'uncommon', price: 5,
     desc: 'Chains of exactly 3 dominoes score +40.' },
-  { id: 'snake', icon: '🐍', name: 'Snake Charmer', rarity: 'rare', price: 7,
+  { id: 'snake', icon: '🐍', name: 'Snake Charmer', rarity: 'rare', price: 8,
     desc: 'If pip values never decrease left→right, the chain scores ×1.5.' },
   { id: 'digger', icon: '⛏️', name: 'Gold Digger', rarity: 'common', price: 5,
     desc: 'Earn $1 for each double (matching-ended) domino you play.' },
@@ -109,7 +125,7 @@ const CHARMS = [
     desc: 'Each joint gains +4 for every joint to its left.' },
   { id: 'sixth', icon: '🕕', name: 'Sixth Sense', rarity: 'common', price: 5,
     desc: '+10 for every joint that touches a 6.' },
-  { id: 'ball', icon: '🔮', name: 'Crystal Ball', rarity: 'rare', price: 7,
+  { id: 'ball', icon: '🔮', name: 'Crystal Ball', rarity: 'rare', price: 8,
     desc: 'Crystal dominoes never shatter.' },
   { id: 'piggy', icon: '🐷', name: 'Piggy Bank', rarity: 'common', price: 4,
     desc: 'Earn $1 at round end for every unused discard.' },
@@ -117,13 +133,13 @@ const CHARMS = [
     desc: '+5 for every domino in the played chain.' },
   { id: 'dice', icon: '🎲', name: 'Loaded Dice', rarity: 'uncommon', price: 6,
     desc: '1-in-3 chance each played chain scores ×2 (rolled when you play).' },
-  { id: 'center', icon: '🎪', name: 'Centerpiece', rarity: 'rare', price: 7,
+  { id: 'center', icon: '🎪', name: 'Centerpiece', rarity: 'rare', price: 8,
     desc: 'The second joint of every chain scores ×2.' },
-  { id: 'ouro', icon: '♾️', name: 'Ouroboros', rarity: 'legendary', price: 12,
+  { id: 'ouro', icon: '♾️', name: 'Ouroboros', rarity: 'legendary', price: 15,
     desc: 'The chain bites its tail: the two exposed ends are also multiplied together and added as a phantom joint.' },
-  { id: 'abs', icon: '🧿', name: 'Absolute', rarity: 'rare', price: 7,
+  { id: 'abs', icon: '🧿', name: 'Absolute', rarity: 'rare', price: 8,
     desc: 'Every end and joint scores its absolute value — cursed bones turn holy.' },
-  { id: 'keystone', icon: '🗿', name: 'Keystone', rarity: 'legendary', price: 14,
+  { id: 'keystone', icon: '🗿', name: 'Keystone', rarity: 'legendary', price: 16,
     desc: '+1 chain slot while this sits on your shelf.' },
 ];
 const MAX_CHARMS = 5;
@@ -204,6 +220,7 @@ function startRound(round) {
   S.hand = ambers.concat(S.drawPile.splice(0, S.handSize - ambers.length));
   S.discardMode = false;
   S.discardSel.clear();
+  animDeal = true;
   render();
 }
 
@@ -413,6 +430,7 @@ function render() {
   $('hud-discards').textContent = S.discardsLeft;
   $('hud-pouch').textContent = S.pouch.length;
   $('goalbar-fill').style.width = Math.min(100, (S.score / S.goal) * 100) + '%';
+  $('goalbar-fill').classList.toggle('goal-met', S.score >= S.goal);
 
   const bb = $('boss-banner');
   if (S.boss) {
@@ -461,12 +479,32 @@ function renderChain() {
       dEl.style.cursor = 'pointer';
       dEl.title = 'Tap to flip';
       dEl.onclick = () => flipSlot(i);
+      if (animPop === i) dEl.classList.add('placed-pop');
+      if (animFlip === i) dEl.classList.add('flip-anim');
       slot.appendChild(dEl);
     } else {
       slot.textContent = i === 0 ? 'start' : '· · ·';
     }
+    // operator connector between adjacent slots, showing × or ^ live
+    if (i < S.chain.length - 1) {
+      const conn = document.createElement('span');
+      const nxt = S.chain[i + 1];
+      if (entry && nxt) {
+        const isPow = ends(entry).rOp === 'pow' || ends(nxt).lOp === 'pow';
+        conn.className = 'chain-op' + (isPow ? ' pow' : '');
+        conn.textContent = isPow ? '^' : '×';
+      } else {
+        conn.className = 'chain-op dim';
+        conn.textContent = '·';
+      }
+      area.appendChild(slot);
+      area.appendChild(conn);
+      return;
+    }
     area.appendChild(slot);
   });
+  animPop = null;
+  animFlip = null;
 
   const placed = S.chain.filter(Boolean).length;
   $('btn-play').disabled = placed < 2 || S.playsLeft <= 0;
@@ -476,8 +514,12 @@ function renderChain() {
 function renderHand() {
   const handEl = $('hand');
   handEl.innerHTML = '';
-  S.hand.forEach((d) => {
+  S.hand.forEach((d, idx) => {
     const el = dominoEl(d);
+    if (animDeal) {
+      el.classList.add('deal-in');
+      el.style.animationDelay = `${idx * 55}ms`;
+    }
     if (S.discardMode) {
       if (S.discardSel.has(d.id)) el.classList.add('sel-discard');
       el.onclick = () => toggleDiscardSel(d.id);
@@ -486,6 +528,7 @@ function renderHand() {
     }
     handEl.appendChild(el);
   });
+  animDeal = false;
 
   $('btn-discard').classList.toggle('hidden', S.discardMode);
   $('btn-discard').disabled = S.discardsLeft <= 0 || S.hand.length === 0;
@@ -520,6 +563,7 @@ function placeFromHand(id) {
   if (hi === -1) return;
   const [d] = S.hand.splice(hi, 1);
   S.chain[slotIdx] = { d, flipped: false };
+  animPop = slotIdx;
   render();
 }
 
@@ -538,6 +582,7 @@ function flipSlot(slotIdx) {
   const entry = S.chain[slotIdx];
   if (!entry) return;
   entry.flipped = !entry.flipped;
+  animFlip = slotIdx;
   render();
 }
 
@@ -587,6 +632,7 @@ function playChain() {
   });
   S.chain = Array(S.chain.length).fill(null);
   refillHand();
+  animDeal = true;
 
   showBreakdown(r);
 }
@@ -595,26 +641,20 @@ function showBreakdown(r) {
   $('bd-expr').textContent = r.expr;
   const linesEl = $('bd-lines');
   linesEl.innerHTML = '';
-  r.lines.forEach((ln) => {
+  let rowIdx = 0;
+  const addRow = (left, right) => {
     const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<span>${ln.label}</span><span>${ln.amt >= 0 ? '+' : ''}${fmt(ln.amt)}</span>`;
+    row.className = 'row bd-row-in';
+    row.style.animationDelay = `${rowIdx * 90}ms`;
+    rowIdx++;
+    row.innerHTML = `<span>${left}</span><span>${right}</span>`;
     linesEl.appendChild(row);
-  });
-  if (r.money > 0) {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<span>💰 Earnings</span><span>+$${r.money}</span>`;
-    linesEl.appendChild(row);
-  }
-  r.shattered.forEach((d) => {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<span>💥 Crystal (${d.a}|${d.b}) shattered!</span><span></span>`;
-    linesEl.appendChild(row);
-  });
-  $('bd-total').textContent = fmt(r.total);
+  };
+  r.lines.forEach((ln) => addRow(ln.label, `${ln.amt >= 0 ? '+' : ''}${fmt(ln.amt)}`));
+  if (r.money > 0) addRow('💰 Earnings', `+$${r.money}`);
+  r.shattered.forEach((d) => addRow(`💥 Crystal (${d.a}|${d.b}) shattered!`, ''));
   $('modal-breakdown').classList.remove('hidden');
+  tweenNumber($('bd-total'), r.total, 800);
 }
 
 function afterBreakdown() {
@@ -727,8 +767,10 @@ function randomShopDomino() {
   return { d, price };
 }
 
-// rarity-weighted sampling without replacement: legendaries are genuinely rare
-const RARITY_WEIGHT = { common: 6, uncommon: 3, rare: 1.5, legendary: 0.5 };
+// rarity-weighted sampling without replacement. Steep on purpose: per shop
+// slot a rare is ~1-in-15 and a legendary ~1-in-100 — the Arcana and Royal
+// wheels are the intended (gambled) route to the top tiers.
+const RARITY_WEIGHT = { common: 10, uncommon: 4, rare: 1, legendary: 0.15 };
 function weightedCharms(pool, n) {
   const p = pool.slice();
   const out = [];
@@ -753,10 +795,214 @@ function generateShop() {
     charms: weightedCharms(charmPool, 2).map((c) => ({ c, sold: false })),
     dominoes: [randomShopDomino(), randomShopDomino()].map((o) => ({ ...o, sold: false })),
     voucher: voucherPool.length ? { v: voucherPool[0], sold: false } : null,
-    powerBrush: Math.random() < 0.15,  // LEGENDARY service: rarely in stock
-    chameleon: Math.random() < 0.12,   // LEGENDARY service: rarely in stock
-    sealColor: pick(Object.keys(SEALS)), // one seal colour per shop
-    services: { pip: false, pip1: false, dup: false, cull: false, brush: false, chamel: false, seal: false, pack: false, cpack: false }, // sold flags
+    royal: Math.random() < 0.25, // the legendary wheel is only sometimes wheeled in
+    spun: {},                    // wheelId -> true once spun this shop
+    services: { pip: false, cull: false }, // targeted workbench sold flags
+  };
+}
+
+/* ---------------- wheels of fortune ----------------
+   The old à-la-carte services are repackaged as pay-to-spin wheels:
+   you buy the spin, the wheel decides the prize. Targeted play survives
+   only as Pip Up and Cull on the workbench. */
+function housePays(n) { S.money += n; toast(`🏦 No valid target — the house pays $${n}`); renderShop(); }
+
+function grantCharmOfRarity(rarity) {
+  const pool = CHARMS.filter((c) => c.rarity === rarity && !S.charms.some((x) => x.id === c.id));
+  if (!pool.length || S.charms.length >= MAX_CHARMS) return false;
+  const c = pick(pool);
+  S.charms.push(c);
+  toast(`${c.icon} ${c.name} joins your shelf!`);
+  return true;
+}
+
+function wheelPipUp() {
+  if (!S.pouch.some((d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'))) return housePays(3);
+  pickDomino('Prize: Pip Up', 'Non-legendary ends gain +1 pip (cancelling forfeits the prize)',
+    (d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'), (d) => {
+      if (canPipEnd(d, 'a')) d.a += 1;
+      if (canPipEnd(d, 'b')) d.b += 1;
+      toast(`Upgraded to (${d.a}|${d.b})`);
+      renderShop();
+    });
+}
+function wheelPrecision() {
+  if (!S.pouch.some((d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'))) return housePays(2);
+  pickEnd('Prize: Precision Pip — tap the end to upgrade', canPipEnd, (d, end) => {
+    d[end] += 1;
+    toast(`Upgraded to (${d.a}|${d.b})`);
+    renderShop();
+  });
+}
+function wheelCull() {
+  if (S.pouch.length <= 8) return housePays(3);
+  pickDomino('Prize: Cull', 'Remove one domino for good', () => true, (d) => {
+    S.pouch = S.pouch.filter((p) => p.id !== d.id);
+    toast(`Removed (${d.a}|${d.b})`);
+    renderShop();
+  });
+}
+function wheelDuplicate() {
+  const offer = shuffle(S.pouch.filter((d) => !isLegendaryMod(d))).slice(0, 10);
+  if (!offer.length) return housePays(4);
+  pickDomino('Prize: Duplicate — the pouch offers 10', 'A copy of your pick joins the pouch', () => true, (d) => {
+    S.pouch.push(makeDomino(d.a, d.b, { material: d.material, seal: d.seal }));
+    toast(`Duplicated (${d.a}|${d.b})`);
+    renderShop();
+  }, offer);
+}
+function wheelGild() {
+  if (!S.pouch.some((d) => d.material === 'plain')) return housePays(4);
+  pickDomino('JACKPOT: Gild a domino', 'It will pay $1 whenever it is played', (d) => d.material === 'plain', (d) => {
+    d.material = 'gold';
+    toast(`(${d.a}|${d.b}) turns to gold!`);
+    renderShop();
+  });
+}
+function wheelCrystallize() {
+  if (!S.pouch.some((d) => d.material === 'plain')) return housePays(4);
+  pickDomino('Prize: Crystallize', 'Its joints double — but it may shatter', (d) => d.material === 'plain', (d) => {
+    d.material = 'crystal';
+    toast(`(${d.a}|${d.b}) turns to crystal!`);
+    renderShop();
+  });
+}
+function wheelSeal() {
+  const color = pick(Object.keys(SEALS));
+  const sd = SEALS[color];
+  if (!S.pouch.some((d) => !d.seal && !isLegendaryMod(d))) return housePays(4);
+  pickDomino(`Prize: ${sd.icon} ${sd.name}`, sd.desc, (d) => !d.seal && !isLegendaryMod(d), (d) => {
+    d.seal = color;
+    toast(`(${d.a}|${d.b}) sealed!`);
+    renderShop();
+  });
+}
+function wheelBonePack() {
+  const pack = [randomShopDomino().d, randomShopDomino().d, randomShopDomino().d];
+  pickDomino('Prize: Bone Pack — keep one', 'The other two are lost', () => true, (d) => {
+    S.pouch.push(d);
+    toast(`(${d.a}|${d.b}) joins your pouch`);
+    renderShop();
+  }, pack);
+}
+function wheelCursedGift() {
+  const a = -(1 + rand(9));
+  const b = rand(2) ? 1 + rand(9) : -(1 + rand(9));
+  S.pouch.push(makeDomino(a, b));
+  S.money += 3;
+  toast(`💀 A cursed (${a}|${b}) sneaks into your pouch (+$3 pity)`);
+  renderShop();
+}
+function wheelPowerBrush() {
+  if (!S.pouch.some((d) => !isLegendaryMod(d))) return housePays(6);
+  pickEnd('JACKPOT: Power Brush — tap the end to empower', (d) => !isLegendaryMod(d), (d, end) => {
+    d[end + 'Op'] = 'pow';
+    toast(`(${d.a}|${d.b}) now carries a power end!`);
+    renderShop();
+  });
+}
+function wheelChamBrush() {
+  if (!S.pouch.some((d) => !isLegendaryMod(d))) return housePays(6);
+  pickEnd('JACKPOT: Chameleon Brush — tap the end to make wild', (d) => !isLegendaryMod(d), (d, end) => {
+    d[end + 'Wild'] = true;
+    toast('A wild end joins your pouch!');
+    renderShop();
+  });
+}
+function wheelBrushRandom() { (rand(2) ? wheelPowerBrush : wheelChamBrush)(); }
+function wheelCharm(rarity, refund) {
+  if (!grantCharmOfRarity(rarity)) return housePays(refund);
+  renderShop();
+}
+
+const WHEELS = [
+  { id: 'tinker', icon: '🔨', name: 'Tinker Wheel', price: 3,
+    desc: 'Everyday pouch work — pips, culls, copies… and a golden jackpot.',
+    outcomes: [
+      { icon: '🔨', label: 'Pip Up: +1/+1 to a chosen domino', w: 35, run: wheelPipUp },
+      { icon: '🔧', label: 'Precision Pip: +1 to a chosen end', w: 25, run: wheelPrecision },
+      { icon: '🗑️', label: 'Cull: remove a chosen domino', w: 15, run: wheelCull },
+      { icon: '🪞', label: 'Duplicate: copy 1 of 10 random', w: 15, run: wheelDuplicate },
+      { icon: '✨', label: 'JACKPOT — gild a chosen domino', w: 10, run: wheelGild },
+    ] },
+  { id: 'mystic', icon: '🔮', name: 'Mystic Wheel', price: 6,
+    desc: 'Seals, materials and stranger things.',
+    outcomes: [
+      { icon: '🔴', label: 'A random seal on a chosen domino', w: 45, run: wheelSeal },
+      { icon: '💎', label: 'Crystallize a chosen domino', w: 20, run: wheelCrystallize },
+      { icon: '🎁', label: 'Bone Pack: 3 bones, keep 1', w: 20, run: wheelBonePack },
+      { icon: '💀', label: 'A cursed bone sneaks in (+$3 pity)', w: 10, run: wheelCursedGift },
+      { icon: '⚡', label: 'JACKPOT — a legendary brush', w: 5, run: wheelBrushRandom },
+    ] },
+  { id: 'arcana', icon: '🎴', name: 'Arcana Wheel', price: 8,
+    desc: 'Charms of shifting rarity.',
+    outcomes: [
+      { icon: '⚪', label: 'A random common charm', w: 55, run: () => wheelCharm('common', 4) },
+      { icon: '🟢', label: 'A random uncommon charm', w: 30, run: () => wheelCharm('uncommon', 5) },
+      { icon: '🟣', label: 'A random rare charm', w: 12, run: () => wheelCharm('rare', 6) },
+      { icon: '🌟', label: 'JACKPOT — a LEGENDARY charm', w: 3, run: () => wheelCharm('legendary', 8) },
+    ] },
+  { id: 'royal', icon: '👑', name: 'Royal Wheel', price: 15, rarity: 'legendary',
+    desc: 'Legendary or bust. Rarely wheeled into the Bazaar.',
+    outcomes: [
+      { icon: '⚡', label: 'Power Brush: one end becomes ^', w: 30, run: wheelPowerBrush },
+      { icon: '🦎', label: 'Chameleon Brush: one end goes wild', w: 30, run: wheelChamBrush },
+      { icon: '🌟', label: 'A random LEGENDARY charm', w: 15, run: () => wheelCharm('legendary', 10) },
+      { icon: '💸', label: 'Bust — the house pays $5', w: 25, run: () => housePays(5) },
+    ] },
+];
+
+function spinWheel(wheel) {
+  if (S.shop.spun[wheel.id]) return;
+  if (!spend(wheel.price)) return;
+  S.shop.spun[wheel.id] = true;
+  const totalW = wheel.outcomes.reduce((s, o) => s + o.w, 0);
+  let r = Math.random() * totalW;
+  let idx = 0;
+  for (; idx < wheel.outcomes.length - 1; idx++) {
+    r -= wheel.outcomes[idx].w;
+    if (r <= 0) break;
+  }
+  renderShop();
+  openWheelModal(wheel, idx);
+}
+
+function openWheelModal(wheel, winIdx) {
+  $('wheel-title').textContent = `${wheel.icon} ${wheel.name}`;
+  const box = $('wheel-outcomes');
+  box.innerHTML = '';
+  wheel.outcomes.forEach((o) => {
+    const el = document.createElement('div');
+    el.className = 'wheel-chip';
+    el.innerHTML = `<span class="wc-icon">${o.icon}</span><span class="wc-label">${o.label}</span><span class="wheel-odds">${o.w}%</span>`;
+    box.appendChild(el);
+  });
+  const chips = [...box.children];
+  const claim = $('btn-wheel-claim');
+  claim.disabled = true;
+  claim.textContent = 'Spinning…';
+  $('modal-wheel').classList.remove('hidden');
+
+  // decelerating highlight: 3 laps then land on the rolled prize
+  const n = chips.length;
+  const total = 3 * n + winIdx + 1;
+  let i = 0;
+  const tick = () => {
+    chips.forEach((c) => c.classList.remove('hl'));
+    chips[i % n].classList.add('hl');
+    i++;
+    if (i < total) {
+      setTimeout(tick, 70 + Math.pow(i / total, 2) * 300);
+    } else {
+      chips[winIdx].classList.add('won');
+      claim.disabled = false;
+      claim.textContent = 'Claim Prize';
+    }
+  };
+  setTimeout(tick, 200);
+  claim.onclick = () => {
+    $('modal-wheel').classList.add('hidden');
+    wheel.outcomes[winIdx].run();
   };
 }
 
@@ -790,7 +1036,7 @@ function renderShop() {
     body.appendChild(sec);
     return row;
   };
-  const item = (row, { name, desc, price, rarity, sold, disabled, onBuy, dominoNode }) => {
+  const item = (row, { name, desc, price, rarity, sold, disabled, onBuy, dominoNode, btnLabel }) => {
     const el = document.createElement('div');
     el.className = 'shop-item' + (sold ? ' sold' : '');
     if (rarity) {
@@ -810,7 +1056,7 @@ function renderShop() {
     el.appendChild(ds);
     const btn = document.createElement('button');
     btn.className = 'btn btn-small btn-gold';
-    btn.textContent = sold ? 'Sold' : `Buy $${price}`;
+    btn.textContent = sold ? 'Sold' : (btnLabel || `Buy $${price}`);
     btn.disabled = sold || disabled || S.money < price;
     btn.onclick = onBuy;
     el.appendChild(btn);
@@ -872,14 +1118,26 @@ function renderShop() {
     });
   });
 
-  // --- services ---
+  // --- wheels of fortune ---
+  const wheelRow = section('Wheels of Fortune — pay to spin, the wheel picks the prize');
+  WHEELS.forEach((w) => {
+    if (w.id === 'royal' && !S.shop.royal) return;
+    item(wheelRow, {
+      name: `${w.icon} ${w.name}`, desc: w.desc, price: w.price,
+      rarity: w.rarity, sold: !!S.shop.spun[w.id],
+      btnLabel: `Spin $${w.price}`,
+      onBuy: () => spinWheel(w),
+    });
+  });
+
+  // --- workbench: the only two targeted services left ---
   const svcRow = section('Workbench');
   item(svcRow, {
-    name: '🔨 Pip Up', desc: '+1 pip to BOTH ends of a chosen domino (max 9). Power ends are locked.', price: 3,
+    name: '🔨 Pip Up', desc: '+1 pip to BOTH ends of a chosen domino (max 9). Legendary ends are locked.', price: 4,
     sold: S.shop.services.pip,
     onBuy: () => pickDomino('Pip Up: choose a domino', 'Non-legendary ends gain +1 pip',
       (d) => canPipEnd(d, 'a') || canPipEnd(d, 'b'), (d) => {
-      if (!spend(3)) return;
+      if (!spend(4)) return;
       if (canPipEnd(d, 'a')) d.a += 1;
       if (canPipEnd(d, 'b')) d.b += 1;
       S.shop.services.pip = true;
@@ -888,109 +1146,10 @@ function renderShop() {
     }),
   });
   item(svcRow, {
-    name: '🔧 Precision Pip', desc: '+1 pip to ONE chosen end (max 9). Power ends are locked.', price: 2,
-    sold: S.shop.services.pip1,
-    onBuy: () => pickEnd('Precision Pip: tap the end to upgrade', canPipEnd, (d, end) => {
-      if (!spend(2)) return;
-      d[end] += 1;
-      S.shop.services.pip1 = true;
-      toast(`Upgraded to (${d.a}|${d.b})`);
-      renderShop();
-    }),
-  });
-  if (S.shop.powerBrush) {
-    item(svcRow, {
-      name: '⚡ Power Brush',
-      desc: 'LEGENDARY: convert one end from × to ^. A powered domino cannot be duplicated, pip-upgraded on that end, or sealed — and can hold only one power end.',
-      price: 12, rarity: 'legendary', sold: S.shop.services.brush,
-      onBuy: () => pickEnd('Power Brush: tap the end to empower', (d) => !isPowered(d), (d, end) => {
-        if (!spend(12)) return;
-        d[end + 'Op'] = 'pow';
-        S.shop.services.brush = true;
-        toast(`(${d.a}|${d.b}) now carries a power end!`);
-        renderShop();
-      }),
-    });
-  }
-  if (S.shop.chameleon) {
-    item(svcRow, {
-      name: '🦎 Chameleon Brush',
-      desc: 'LEGENDARY: turn one end WILD — it copies the pip value it touches (facing wilds resonate as 7s; exposed wilds mirror their own domino). Same exclusivity rules as power ends.',
-      price: 12, rarity: 'legendary', sold: S.shop.services.chamel,
-      onBuy: () => pickEnd('Chameleon Brush: tap the end to make wild', (d) => !isLegendaryMod(d), (d, end) => {
-        if (!spend(12)) return;
-        d[end + 'Wild'] = true;
-        S.shop.services.chamel = true;
-        toast('A wild end joins your pouch!');
-        renderShop();
-      }),
-    });
-  }
-  {
-    const sc = S.shop.sealColor;
-    const sd = SEALS[sc];
-    item(svcRow, {
-      name: `${sd.icon} ${sd.name}`, desc: sd.desc + ' One seal per domino; legendary dominoes cannot be sealed.',
-      price: sd.price, rarity: 'uncommon', sold: S.shop.services.seal,
-      onBuy: () => pickDomino(`${sd.name}: choose a domino`, sd.desc,
-        (d) => !d.seal && !isLegendaryMod(d), (d) => {
-        if (!spend(sd.price)) return;
-        d.seal = sc;
-        S.shop.services.seal = true;
-        toast(`(${d.a}|${d.b}) sealed!`);
-        renderShop();
-      }),
-    });
-  }
-  item(svcRow, {
-    name: '🪞 Duplicate', desc: 'Copy one domino — the pouch offers 10 at random. Power dominoes never appear.', price: 5,
-    sold: S.shop.services.dup,
-    onBuy: () => {
-      const offer = shuffle(S.pouch.filter((d) => !isLegendaryMod(d))).slice(0, 10);
-      pickDomino('Duplicate: the pouch offers these 10', 'A copy of your pick joins the pouch', () => true, (d) => {
-        if (!spend(5)) return;
-        S.pouch.push(makeDomino(d.a, d.b, { material: d.material, seal: d.seal }));
-        S.shop.services.dup = true;
-        toast(`Duplicated (${d.a}|${d.b})`);
-        renderShop();
-      }, offer);
-    },
-  });
-  item(svcRow, {
-    name: '🎁 Bone Pack', desc: 'Crack a pack of 3 random dominoes and keep ONE.', price: 4,
-    sold: S.shop.services.pack,
-    onBuy: () => {
-      const packContents = [randomShopDomino().d, randomShopDomino().d, randomShopDomino().d];
-      pickDomino('Bone Pack: keep one', 'The other two are lost', () => true, (d) => {
-        if (!spend(4)) return;
-        S.pouch.push(d);
-        S.shop.services.pack = true;
-        toast(`(${d.a}|${d.b}) joins your pouch`);
-        renderShop();
-      }, packContents);
-    },
-  });
-  const cpackPool = CHARMS.filter((c) => !S.charms.some((x) => x.id === c.id));
-  item(svcRow, {
-    name: '🎴 Charm Pack', desc: 'Crack a pack of 3 random charms and keep ONE.', price: 6,
-    sold: S.shop.services.cpack,
-    disabled: S.charms.length >= MAX_CHARMS || cpackPool.length === 0,
-    onBuy: () => {
-      const packCharms = weightedCharms(cpackPool, 3);
-      pickCharm('Charm Pack: keep one', 'The others return to the ether', packCharms, (c) => {
-        if (!spend(6)) return;
-        S.charms.push(c);
-        S.shop.services.cpack = true;
-        toast(`${c.icon} ${c.name} joins your shelf!`);
-        renderShop();
-      });
-    },
-  });
-  item(svcRow, {
-    name: '🗑️ Cull', desc: 'Remove a domino from your pouch for good (min pouch 8).', price: 3,
+    name: '🗑️ Cull', desc: 'Remove a domino from your pouch for good (min pouch 8).', price: 4,
     sold: S.shop.services.cull, disabled: S.pouch.length <= 8,
     onBuy: () => pickDomino('Cull: choose a domino to remove', 'Gone forever — a thinner pouch draws better', () => true, (d) => {
-      if (!spend(3)) return;
+      if (!spend(4)) return;
       S.pouch = S.pouch.filter((p) => p.id !== d.id);
       S.shop.services.cull = true;
       toast(`Removed (${d.a}|${d.b})`);
@@ -1048,18 +1207,6 @@ function pickDomino(title, sub, eligible, cb, list) {
     grid.appendChild(el);
   });
 }
-function pickCharm(title, sub, charms, cb) {
-  openPicker(title, sub);
-  const grid = $('picker-grid');
-  charms.forEach((c) => {
-    const el = document.createElement('div');
-    el.className = 'charm-card';
-    el.innerHTML = `<span class="si-rarity ${c.rarity}">${c.rarity}</span><span class="cc-name">${c.icon} ${c.name}</span><span class="cc-desc">${c.desc}</span>`;
-    el.onclick = () => { closePicker(); cb(c); };
-    grid.appendChild(el);
-  });
-}
-
 function pickEnd(title, eligible, cb) {
   openPicker(title, 'Tap the specific half of a domino');
   const grid = $('picker-grid');
