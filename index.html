@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chainbone — a domino deck-builder</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===================== MENU ===================== -->
+<section id="screen-menu" class="screen">
+  <div class="menu-box">
+    <h1 class="logo">CHAIN<span>BONE</span></h1>
+    <p class="tagline">A rogue-like domino deck-builder</p>
+    <button id="btn-new-run" class="btn btn-big btn-gold">New Run</button>
+    <button id="btn-menu-help" class="btn btn-ghost">How to Play</button>
+    <p id="best-round" class="best-round"></p>
+  </div>
+</section>
+
+<!-- ===================== GAME ===================== -->
+<section id="screen-game" class="screen hidden">
+
+  <header class="topbar">
+    <div class="stat"><span class="stat-label">Round</span><span id="hud-round" class="stat-val">1</span></div>
+    <div class="stat goal-stat">
+      <span class="stat-label">Goal</span>
+      <span class="stat-val"><span id="hud-score">0</span> / <span id="hud-goal">0</span></span>
+      <div class="goalbar"><div id="goalbar-fill" class="goalbar-fill"></div></div>
+    </div>
+    <div class="stat"><span class="stat-label">Money</span><span id="hud-money" class="stat-val money">$0</span></div>
+    <div class="stat"><span class="stat-label">Plays</span><span id="hud-plays" class="stat-val">3</span></div>
+    <div class="stat"><span class="stat-label">Discards</span><span id="hud-discards" class="stat-val">3</span></div>
+    <button id="btn-pouch" class="btn btn-small">Pouch <span id="hud-pouch">30</span></button>
+    <button id="btn-help" class="btn btn-small">?</button>
+  </header>
+
+  <div id="boss-banner" class="boss-banner hidden"></div>
+
+  <div id="charm-shelf" class="charm-shelf"></div>
+
+  <main class="table">
+    <div id="chain-area" class="chain-area"></div>
+    <div id="expr-preview" class="expr-preview"></div>
+    <div class="table-actions">
+      <button id="btn-play" class="btn btn-gold" disabled>Play Chain</button>
+      <button id="btn-clear" class="btn" disabled>Clear</button>
+    </div>
+  </main>
+
+  <footer class="hand-area">
+    <div class="hand-actions">
+      <button id="btn-discard" class="btn btn-small">Discard…</button>
+      <button id="btn-discard-confirm" class="btn btn-small btn-red hidden">Confirm (0)</button>
+      <button id="btn-discard-cancel" class="btn btn-small hidden">Cancel</button>
+      <span class="hand-hint" id="hand-hint">Tap a domino to add it to the chain · tap a placed domino to flip it</span>
+    </div>
+    <div id="hand" class="hand"></div>
+  </footer>
+</section>
+
+<!-- ===================== ROUND END ===================== -->
+<div id="overlay-roundend" class="overlay hidden">
+  <div class="panel">
+    <h2>Round <span id="re-round"></span> cleared!</h2>
+    <div id="re-breakdown" class="cash-breakdown"></div>
+    <button id="btn-to-shop" class="btn btn-big btn-gold">Go to Shop</button>
+  </div>
+</div>
+
+<!-- ===================== SHOP ===================== -->
+<div id="overlay-shop" class="overlay hidden">
+  <div class="panel panel-wide shop-panel">
+    <div class="shop-head">
+      <h2>The Bone Bazaar</h2>
+      <span class="money big" id="shop-money">$0</span>
+    </div>
+    <div id="shop-body"></div>
+    <div class="shop-foot">
+      <button id="btn-reroll" class="btn">Reroll $2</button>
+      <button id="btn-next-round" class="btn btn-big btn-gold">Next Round ▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== GAME OVER ===================== -->
+<div id="overlay-gameover" class="overlay hidden">
+  <div class="panel">
+    <h2 class="danger">Run Over</h2>
+    <div id="go-stats" class="go-stats"></div>
+    <button id="btn-restart" class="btn btn-big btn-gold">New Run</button>
+    <button id="btn-to-menu" class="btn btn-ghost">Main Menu</button>
+  </div>
+</div>
+
+<!-- ===================== SCORE BREAKDOWN ===================== -->
+<div id="modal-breakdown" class="overlay hidden">
+  <div class="panel">
+    <h2>Chain Scored</h2>
+    <div id="bd-expr" class="bd-expr"></div>
+    <div id="bd-lines" class="bd-lines"></div>
+    <div class="bd-total">Total: <span id="bd-total"></span></div>
+    <button id="btn-bd-ok" class="btn btn-big btn-gold">Continue</button>
+  </div>
+</div>
+
+<!-- ===================== PICKER (choose a domino / end) ===================== -->
+<div id="modal-picker" class="overlay hidden">
+  <div class="panel panel-wide">
+    <h2 id="picker-title">Choose a domino</h2>
+    <p id="picker-sub" class="picker-sub"></p>
+    <div id="picker-grid" class="picker-grid"></div>
+    <button id="btn-picker-cancel" class="btn">Cancel</button>
+  </div>
+</div>
+
+<!-- ===================== POUCH VIEW ===================== -->
+<div id="modal-pouch" class="overlay hidden">
+  <div class="panel panel-wide">
+    <h2>Your Pouch</h2>
+    <p class="picker-sub" id="pouch-sub"></p>
+    <div id="pouch-grid" class="picker-grid"></div>
+    <button id="btn-pouch-close" class="btn">Close</button>
+  </div>
+</div>
+
+<!-- ===================== HELP ===================== -->
+<div id="modal-help" class="overlay hidden">
+  <div class="panel panel-wide help-panel">
+    <h2>How to Play</h2>
+    <div class="help-body">
+      <p><strong>Goal:</strong> each round has a score goal. Build domino chains until your round score breaches it. Fail with no plays left and the run is over.</p>
+      <p><strong>Chains:</strong> tap dominoes in your hand to lay them left-to-right (up to <em>4 slots</em> to start). Tap a placed domino to <em>flip</em> it. You need at least 2 dominoes to play a chain.</p>
+      <p><strong>Scoring (BIDMAS):</strong> the two exposed outer ends are <em>added</em>; every pair of touching ends is <em>multiplied</em>. So (1|2)(3|4)(5|6)(6|1) scores 1 + 2×3 + 4×5 + 6×6 + 1 = <strong>64</strong>.</p>
+      <p><strong>Power ends:</strong> a rare upgrade turns an end's operator from × into ^. A joint touching a power end scores aᵇ instead of a×b — powers bind before multiplication, exactly as BIDMAS demands.</p>
+      <p><strong>Plays &amp; discards:</strong> 3 plays per round; scoring a chain consumes its dominoes for the round and refills your hand. Discards let you swap up to 5 hand dominoes, 3 times per round.</p>
+      <p><strong>Money:</strong> clear a round to earn $4, plus $1 per unused play, plus interest ($1 per $5 held). Spend it in the Bone Bazaar on charms, new dominoes, pip upgrades, power ends and vouchers.</p>
+      <p><strong>Materials:</strong> <span class="mat-gold">Gold</span> dominoes pay $1 whenever they score. <span class="mat-crystal">Crystal</span> dominoes double every joint they touch — but may shatter after scoring.</p>
+      <p><strong>Bosses:</strong> every 3rd round a boss twists the rules. Read the banner.</p>
+    </div>
+    <button id="btn-help-close" class="btn btn-big">Got it</button>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="game.js"></script>
+</body>
+</html>
