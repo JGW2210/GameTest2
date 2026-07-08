@@ -160,6 +160,12 @@ body {
   border-radius: 7px; padding: 0 5px; line-height: 1.25; z-index: 4;
   box-shadow: 0 1px 2px rgba(0,0,0,0.5);
 }
+.domino .seal-dot {
+  position: absolute; top: -5px; left: -5px; z-index: 4;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f0655a, #a11408);
+  border: 1px solid #6e0d05; box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
 .domino.mat-gold { background: linear-gradient(160deg, #f7dc8f, #d9ac45); border-color: #a37c1c; }
 .domino.mat-crystal { background: linear-gradient(160deg, #d8f4fa, #90cede); border-color: #4f96a8; }
 .mat-gold { color: var(--gold); }
@@ -220,6 +226,7 @@ body {
 .si-rarity.common { color: var(--muted); }
 .si-rarity.uncommon { color: #7fd6a0; }
 .si-rarity.rare { color: var(--pow); }
+.si-rarity.legendary { color: #ff9f43; text-shadow: 0 0 8px rgba(255,159,67,0.55); }
 .shop-item.sold { opacity: 0.45; }
 .shop-foot { display: flex; justify-content: space-between; width: 100%; gap: 0.6rem; flex-wrap: wrap; }
 .owned-charm-row { display: flex; align-items: center; gap: 0.5rem; }

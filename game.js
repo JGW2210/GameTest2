@@ -43,8 +43,12 @@ function makeDomino(a, b, opts = {}) {
     aOp: opts.aOp || 'mul',
     bOp: opts.bOp || 'mul',
     material: opts.material || 'plain', // plain | gold | crystal
+    seal: opts.seal || null, // null | 'ruby'
   };
 }
+// Power ends are LEGENDARY and exclusive: a powered domino cannot be
+// duplicated, its ends cannot gain pips, and it cannot hold a seal.
+const isPowered = (d) => d.aOp === 'pow' || d.bOp === 'pow';
 function startingPouch() {
   const pouch = [];
   for (let a = 0; a <= 6; a++)
@@ -88,6 +92,16 @@ const CHARMS = [
     desc: '+10 for every joint that touches a 6.' },
   { id: 'ball', icon: '🔮', name: 'Crystal Ball', rarity: 'rare', price: 7,
     desc: 'Crystal dominoes never shatter.' },
+  { id: 'piggy', icon: '🐷', name: 'Piggy Bank', rarity: 'common', price: 4,
+    desc: 'Earn $1 at round end for every unused discard.' },
+  { id: 'survey', icon: '📏', name: 'Surveyor', rarity: 'common', price: 4,
+    desc: '+5 for every domino in the played chain.' },
+  { id: 'dice', icon: '🎲', name: 'Loaded Dice', rarity: 'uncommon', price: 6,
+    desc: '1-in-3 chance each played chain scores ×2 (rolled when you play).' },
+  { id: 'center', icon: '🎪', name: 'Centerpiece', rarity: 'rare', price: 7,
+    desc: 'The second joint of every chain scores ×2.' },
+  { id: 'ouro', icon: '♾️', name: 'Ouroboros', rarity: 'legendary', price: 12,
+    desc: 'The chain bites its tail: the two exposed ends are also multiplied together and added as a phantom joint.' },
 ];
 const MAX_CHARMS = 5;
 const has = (id) => S.charms.some((c) => c.id === id);
@@ -181,7 +195,7 @@ function refillHand() {
 function effVal(v) {
   return v === 0 && has('blank') ? 7 : v;
 }
-function scoreChain(entries) {
+function scoreChain(entries, opts = {}) {
   const n = entries.length;
   const exprParts = [];
   const lines = []; // {label, amt} bonus rows for the breakdown
@@ -219,10 +233,15 @@ function scoreChain(entries) {
     if (entries[i + 1].d.material === 'crystal') crystals++;
     if (crystals) { const m = Math.pow(2, crystals); lines.push({ label: `💎 Crystal joint ×${m}`, amt: v * (m - 1) }); v *= m; }
     if (has('twin') && a === b) { lines.push({ label: '🔥 Twin Flame: matching joint ×2', amt: v }); v *= 2; }
+    if (has('center') && i === 1) { lines.push({ label: '🎪 Centerpiece: 2nd joint ×2', amt: v }); v *= 2; }
     if (has('even') && base % 2 === 0) { lines.push({ label: '⚖️ Even Steven', amt: 8 }); v += 8; }
     if (has('odd') && base % 2 === 1) { lines.push({ label: '🎭 Odd Rod', amt: 8 }); v += 8; }
     if (has('sixth') && (a === 6 || b === 6)) { lines.push({ label: '🕕 Sixth Sense', amt: 10 }); v += 10; }
     if (has('momentum') && i > 0) { lines.push({ label: `🎢 Momentum (joint ${i + 1})`, amt: 4 * i }); v += 4 * i; }
+    // ruby seals retrigger the joint's base value once per sealed participant
+    [entries[i], entries[i + 1]].forEach((e) => {
+      if (e.d.seal === 'ruby') { lines.push({ label: '🔴 Ruby Seal: joint retriggered', amt: base }); v += base; }
+    });
     jointVals.push(v);
     total += v;
   }
@@ -234,6 +253,12 @@ function scoreChain(entries) {
   total += endR;
 
   // --- chain-level effects ---
+  if (has('ouro')) {
+    const phantom = firstVal * lastVal;
+    lines.push({ label: '♾️ Ouroboros: phantom joint (ends multiplied)', amt: phantom });
+    total += phantom;
+  }
+  if (has('survey')) { lines.push({ label: '📏 Surveyor', amt: 5 * n }); total += 5 * n; }
   if (has('high') && jointVals.length) {
     const best = Math.max(...jointVals);
     lines.push({ label: '🎯 High Roller: best joint again', amt: best });
@@ -248,6 +273,11 @@ function scoreChain(entries) {
       lines.push({ label: '🐍 Snake Charmer: chain ×1.5', amt: bonus });
       total += bonus;
     }
+  }
+  // rolled only when a chain is actually played, never in the preview
+  if (has('dice') && opts.roll && Math.random() < 1 / 3) {
+    lines.push({ label: '🎲 Loaded Dice: chain ×2!', amt: total });
+    total *= 2;
   }
   total = Math.round(total);
 
@@ -300,6 +330,12 @@ function dominoEl(d, { flipped = false, small = false } = {}) {
   const lOp = flipped ? d.bOp : d.aOp, rOp = flipped ? d.aOp : d.bOp;
   el.appendChild(halfEl(l, lOp, 'left'));
   el.appendChild(halfEl(r, rOp, 'right'));
+  if (d.seal === 'ruby') {
+    const dot = document.createElement('span');
+    dot.className = 'seal-dot';
+    dot.title = 'Ruby Seal: this domino retriggers its joints';
+    el.appendChild(dot);
+  }
   return el;
 }
 
@@ -477,7 +513,7 @@ function playChain() {
   const entries = S.chain.filter(Boolean);
   if (entries.length < 2 || S.playsLeft <= 0) return;
 
-  const r = scoreChain(entries);
+  const r = scoreChain(entries, { roll: true });
   S.playsLeft--;
   S.score += r.total;
   S.bestChain = Math.max(S.bestChain, r.total);
@@ -539,12 +575,14 @@ function winRound() {
   const base = 4;
   const playBonus = S.playsLeft;
   const interest = Math.min(S.interestCap, Math.floor(S.money / 5));
+  const piggy = has('piggy') ? S.discardsLeft : 0;
   const rows = [
     ['Round cleared', `$${base}`],
     [`Unused plays ×${playBonus}`, `$${playBonus}`],
     [`Interest ($1 per $5, cap $${S.interestCap})`, `$${interest}`],
   ];
-  S.money += base + playBonus + interest;
+  if (piggy) rows.push([`🐷 Piggy Bank: unused discards ×${S.discardsLeft}`, `$${piggy}`]);
+  S.money += base + playBonus + interest + piggy;
   $('re-round').textContent = S.round;
   const bd = $('re-breakdown');
   bd.innerHTML = '';
@@ -583,16 +621,35 @@ function randomShopDomino() {
   return { d, price };
 }
 
+// rarity-weighted sampling without replacement: legendaries are genuinely rare
+const RARITY_WEIGHT = { common: 6, uncommon: 3, rare: 1.5, legendary: 0.5 };
+function weightedCharms(pool, n) {
+  const p = pool.slice();
+  const out = [];
+  while (out.length < n && p.length) {
+    const totalW = p.reduce((s, c) => s + RARITY_WEIGHT[c.rarity], 0);
+    let r = Math.random() * totalW;
+    let idx = 0;
+    for (; idx < p.length - 1; idx++) {
+      r -= RARITY_WEIGHT[p[idx].rarity];
+      if (r <= 0) break;
+    }
+    out.push(p.splice(idx, 1)[0]);
+  }
+  return out;
+}
+
 function generateShop() {
   const owned = new Set(S.charms.map((c) => c.id));
-  const charmPool = shuffle(CHARMS.filter((c) => !owned.has(c.id)));
+  const charmPool = CHARMS.filter((c) => !owned.has(c.id));
   const voucherPool = shuffle(VOUCHERS.filter((v) => v.can()));
   S.shop = {
-    charms: charmPool.slice(0, 2).map((c) => ({ c, sold: false })),
+    charms: weightedCharms(charmPool, 2).map((c) => ({ c, sold: false })),
     dominoes: [randomShopDomino(), randomShopDomino()].map((o) => ({ ...o, sold: false })),
     voucher: voucherPool.length ? { v: voucherPool[0], sold: false } : null,
-    powerBrush: Math.random() < 0.35, // rare service: only sometimes in stock
-    services: { pip: false, pip1: false, dup: false, cull: false, brush: false }, // sold flags
+    powerBrush: Math.random() < 0.15, // LEGENDARY service: rarely in stock
+    rubySeal: Math.random() < 0.5,    // uncommon service
+    services: { pip: false, pip1: false, dup: false, cull: false, brush: false, seal: false, pack: false }, // sold flags
   };
 }
 
@@ -710,20 +767,22 @@ function renderShop() {
   // --- services ---
   const svcRow = section('Workbench');
   item(svcRow, {
-    name: '🔨 Pip Up', desc: '+1 pip to BOTH ends of a chosen domino (max 9).', price: 3,
+    name: '🔨 Pip Up', desc: '+1 pip to BOTH ends of a chosen domino (max 9). Power ends are locked.', price: 3,
     sold: S.shop.services.pip,
-    onBuy: () => pickDomino('Pip Up: choose a domino', 'Both ends gain +1 pip', (d) => d.a < 9 || d.b < 9, (d) => {
+    onBuy: () => pickDomino('Pip Up: choose a domino', 'Non-power ends gain +1 pip',
+      (d) => (d.aOp !== 'pow' && d.a < 9) || (d.bOp !== 'pow' && d.b < 9), (d) => {
       if (!spend(3)) return;
-      d.a = Math.min(9, d.a + 1); d.b = Math.min(9, d.b + 1);
+      if (d.aOp !== 'pow') d.a = Math.min(9, d.a + 1);
+      if (d.bOp !== 'pow') d.b = Math.min(9, d.b + 1);
       S.shop.services.pip = true;
       toast(`Upgraded to (${d.a}|${d.b})`);
       renderShop();
     }),
   });
   item(svcRow, {
-    name: '🔧 Precision Pip', desc: '+1 pip to ONE chosen end (max 9).', price: 2,
+    name: '🔧 Precision Pip', desc: '+1 pip to ONE chosen end (max 9). Power ends are locked.', price: 2,
     sold: S.shop.services.pip1,
-    onBuy: () => pickEnd('Precision Pip: tap the end to upgrade', (d, end) => d[end] < 9, (d, end) => {
+    onBuy: () => pickEnd('Precision Pip: tap the end to upgrade', (d, end) => d[end] < 9 && d[end + 'Op'] !== 'pow', (d, end) => {
       if (!spend(2)) return;
       d[end] = Math.min(9, d[end] + 1);
       S.shop.services.pip1 = true;
@@ -733,10 +792,11 @@ function renderShop() {
   });
   if (S.shop.powerBrush) {
     item(svcRow, {
-      name: '⚡ Power Brush', desc: 'RARE: convert one end from × to ^. Joints touching it score a^b.', price: 8,
-      rarity: 'rare', sold: S.shop.services.brush,
-      onBuy: () => pickEnd('Power Brush: tap the end to empower', (d, end) => d[end + 'Op'] !== 'pow', (d, end) => {
-        if (!spend(8)) return;
+      name: '⚡ Power Brush',
+      desc: 'LEGENDARY: convert one end from × to ^. A powered domino cannot be duplicated, pip-upgraded on that end, or sealed — and can hold only one power end.',
+      price: 12, rarity: 'legendary', sold: S.shop.services.brush,
+      onBuy: () => pickEnd('Power Brush: tap the end to empower', (d) => !isPowered(d), (d, end) => {
+        if (!spend(12)) return;
         d[end + 'Op'] = 'pow';
         S.shop.services.brush = true;
         toast(`(${d.a}|${d.b}) now carries a power end!`);
@@ -744,16 +804,47 @@ function renderShop() {
       }),
     });
   }
+  if (S.shop.rubySeal) {
+    item(svcRow, {
+      name: '🔴 Ruby Seal', desc: 'Seal a domino: every joint it touches retriggers (its base value scores again). Power dominoes cannot be sealed.', price: 6,
+      rarity: 'uncommon', sold: S.shop.services.seal,
+      onBuy: () => pickDomino('Ruby Seal: choose a domino', 'Its joints will retrigger',
+        (d) => !d.seal && !isPowered(d), (d) => {
+        if (!spend(6)) return;
+        d.seal = 'ruby';
+        S.shop.services.seal = true;
+        toast(`(${d.a}|${d.b}) sealed in ruby!`);
+        renderShop();
+      }),
+    });
+  }
   item(svcRow, {
-    name: '🪞 Duplicate', desc: 'Add an exact copy of a chosen domino to your pouch.', price: 5,
+    name: '🪞 Duplicate', desc: 'Copy one domino — the pouch offers 10 at random. Power dominoes never appear.', price: 5,
     sold: S.shop.services.dup,
-    onBuy: () => pickDomino('Duplicate: choose a domino', 'A copy joins your pouch', () => true, (d) => {
-      if (!spend(5)) return;
-      S.pouch.push(makeDomino(d.a, d.b, { aOp: d.aOp, bOp: d.bOp, material: d.material }));
-      S.shop.services.dup = true;
-      toast(`Duplicated (${d.a}|${d.b})`);
-      renderShop();
-    }),
+    onBuy: () => {
+      const offer = shuffle(S.pouch.filter((d) => !isPowered(d))).slice(0, 10);
+      pickDomino('Duplicate: the pouch offers these 10', 'A copy of your pick joins the pouch', () => true, (d) => {
+        if (!spend(5)) return;
+        S.pouch.push(makeDomino(d.a, d.b, { material: d.material, seal: d.seal }));
+        S.shop.services.dup = true;
+        toast(`Duplicated (${d.a}|${d.b})`);
+        renderShop();
+      }, offer);
+    },
+  });
+  item(svcRow, {
+    name: '🎁 Bone Pack', desc: 'Crack a pack of 3 random dominoes and keep ONE.', price: 4,
+    sold: S.shop.services.pack,
+    onBuy: () => {
+      const packContents = [randomShopDomino().d, randomShopDomino().d, randomShopDomino().d];
+      pickDomino('Bone Pack: keep one', 'The other two are lost', () => true, (d) => {
+        if (!spend(4)) return;
+        S.pouch.push(d);
+        S.shop.services.pack = true;
+        toast(`(${d.a}|${d.b}) joins your pouch`);
+        renderShop();
+      }, packContents);
+    },
   });
   item(svcRow, {
     name: '🗑️ Cull', desc: 'Remove a domino from your pouch for good (min pouch 8).', price: 3,
@@ -804,10 +895,10 @@ function closePicker() {
   $('modal-picker').classList.add('hidden');
   pickerCb = null;
 }
-function pickDomino(title, sub, eligible, cb) {
+function pickDomino(title, sub, eligible, cb, list) {
   openPicker(title, sub);
   const grid = $('picker-grid');
-  S.pouch.forEach((d) => {
+  (list || S.pouch).forEach((d) => {
     const el = dominoEl(d, { small: true });
     if (eligible(d)) {
       el.onclick = () => { closePicker(); cb(d); };
