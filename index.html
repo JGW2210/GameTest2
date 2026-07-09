@@ -16,6 +16,11 @@
   <div class="menu-box">
     <h1 class="logo">CHAIN<span>BONE</span></h1>
     <p class="tagline">A rogue-like domino deck-builder</p>
+    <div class="select-label">Pouch</div>
+    <div id="pouch-row" class="select-row"></div>
+    <div class="select-label">Stake</div>
+    <div id="stake-row" class="select-row"></div>
+    <p id="menu-desc" class="menu-desc"></p>
     <button id="btn-new-run" class="btn btn-big btn-gold">New Run</button>
     <button id="btn-menu-help" class="btn btn-ghost">How to Play</button>
     <p id="best-round" class="best-round"></p>
@@ -88,10 +93,20 @@
   </div>
 </div>
 
+<!-- ===================== VICTORY ===================== -->
+<div id="overlay-victory" class="overlay hidden">
+  <div class="panel">
+    <h2 class="victory">🏆 Run Complete!</h2>
+    <p class="victory-sub">Round 12 has fallen — this pouch has proven itself.</p>
+    <button id="btn-endless" class="btn btn-big btn-gold">Continue Endlessly ♾️</button>
+    <button id="btn-retire" class="btn">Retire Victorious</button>
+  </div>
+</div>
+
 <!-- ===================== GAME OVER ===================== -->
 <div id="overlay-gameover" class="overlay hidden">
   <div class="panel">
-    <h2 class="danger">Run Over</h2>
+    <h2 id="go-title" class="danger">Run Over</h2>
     <div id="go-stats" class="go-stats"></div>
     <button id="btn-restart" class="btn btn-big btn-gold">New Run</button>
     <button id="btn-to-menu" class="btn btn-ghost">Main Menu</button>
@@ -148,11 +163,13 @@
       <p><strong>Scoring (BIDMAS):</strong> the two exposed outer ends are <em>added</em>; every pair of touching ends is <em>multiplied</em>. So (1|2)(3|4)(5|6)(6|1) scores 1 + 2×3 + 4×5 + 6×6 + 1 = <strong>64</strong>.</p>
       <p><strong>Power ends (LEGENDARY):</strong> a legendary upgrade turns an end's operator from × into ^. A joint touching a power end scores aᵇ instead of a×b — powers bind before multiplication, exactly as BIDMAS demands. Powered dominoes are exclusive: they can't be duplicated, the powered end's pips are locked forever, they can't be sealed, and each domino can hold only one power end.</p>
       <p><strong>Wild ends (LEGENDARY):</strong> a Chameleon-brushed end shows ★ and copies the pip value it touches. Two facing wilds resonate as 7s; an exposed wild mirrors its own domino's other end. Same exclusivity rules as power ends.</p>
-      <p><strong>Seals</strong> (one per domino, never on legendaries): <span style="color:#f0655a">Ruby</span> retriggers every joint it touches; <span style="color:#e8b84b">Gold</span> pays $2 when played; <span style="color:#6fb7e8">Azure</span> returns to your hand after scoring; <span style="color:#f0a04b">Amber</span> is guaranteed in your opening hand.</p>
+      <p><strong>Seals</strong> (one per domino, never on legendaries; won from Seal Packs): <span style="color:#e8b84b">Gold</span> pays $2 when played; <span style="color:#f0a04b">Amber</span> is guaranteed in your opening hand and adds +8; <span style="color:#f0655a">Ruby</span> retriggers every joint it touches; <span style="color:#6fb7e8">Azure</span> returns to your hand after scoring; and the rare <span style="color:#a98fd6">Obsidian</span> (big packs only) turns the + inside its domino into ×, multiplying its two neighbouring terms together — pure BIDMAS mischief.</p>
+      <p><strong>Pouches &amp; Stakes:</strong> clear rounds to unlock new starting pouches (gilded, cracked, cursed, crystal); each harder stake unlocks by clearing round 10 on the one before it — pick both on the menu screen.</p>
+      <p><strong>Winning &amp; Endless:</strong> clear <em>round 12</em> to complete the run (a 🏆 marks conquered stakes). You may then retire victorious — or continue endlessly, with goals growing 50% faster every round until the pouch finally breaks.</p>
       <p><strong>Cursed bones:</strong> cheap dominoes with negative pips that subtract from your chain — unless the 🧿 Absolute charm turns every value positive.</p>
       <p><strong>Skipping the shop:</strong> after clearing a round you may skip the Bazaar for a rolled tag reward — cash, a free charm, or free pip upgrades. Boss rounds pay a $4 bounty.</p>
       <p><strong>Plays &amp; discards:</strong> 3 plays per round; scoring a chain consumes its dominoes for the round and refills your hand. Discards let you swap up to 5 hand dominoes, 3 times per round.</p>
-      <p><strong>Money:</strong> clear a round to earn $4, plus $1 per unused play, plus interest ($1 per $5 held). Spend it in the Bone Bazaar on charms, dominoes, targeted pip work — and the <strong>Wheels of Fortune</strong>: pay to spin, the wheel picks your prize. Seals, brushes, packs and the rarest magics live on the wheels now.</p>
+      <p><strong>Money:</strong> clear a round to earn $4, plus $1 per unused play, plus interest ($1 per $5 held). Spend it in the Bone Bazaar on charms, dominoes, targeted pip work — and <strong>Packs</strong>: two per shop (Tinker, Seal or Arcana, repeats possible), small packs show 3 options and big packs 5; you always choose which one to keep. Only the rare <strong>Royal Wheel</strong> is still a gamble.</p>
       <p><strong>Materials:</strong> <span class="mat-gold">Gold</span> dominoes pay $1 whenever they score. <span class="mat-crystal">Crystal</span> dominoes double every joint they touch — but may shatter after scoring.</p>
       <p><strong>Bosses:</strong> every 3rd round a boss twists the rules. Read the banner.</p>
     </div>

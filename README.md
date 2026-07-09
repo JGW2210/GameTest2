@@ -36,29 +36,83 @@ formula and the deck. Chainbone maps each of those axes onto dominoes:
 | Destroying cards | **Cull** on the workbench (thin the pouch, min 8) | Draw consistency |
 | Buying cards | **Fresh Bones** — 2 dominoes per shop, sometimes gold/crystal/cursed | Deck composition |
 | Everything else | **The Wheels of Fortune** — pay to spin, the wheel picks the prize (see below) | Consolidated RNG economy |
-| Vouchers | **Vouchers**: Long Table (+1 chain slot), Deep Pockets (+1 hand size), Encore (+1 play), Second Wind (+1 discard), Green Thumb (interest cap) | The run's fundamental constraints |
+| Vouchers | **Vouchers**: Long Table (+1 chain slot), Deep Pockets (+1 hand size), Encore (+1 play), Second Wind (+1 discard), Green Thumb (interest cap), Pack Mule (permanent third pack slot) | The run's fundamental constraints |
 | Skip tags | **Skip the Bazaar** — forgo the shop for a rolled tag: +$10, a free charm, or free pip upgrades | Tempo vs. greed |
 | Interest & economy | $1 per $5 held (capped), reroll costs that escalate | Money as a strategy |
 | Boss Blinds | **Bosses** every 3rd round (no flipping / first joint silenced / fewer plays / higher goal), each paying a $4 bounty | Forced adaptation |
 
-### The Wheels of Fortune
+### Packs (choice) and the Royal Wheel (gamble)
 
-The old à-la-carte services (precision pips, duplicates, seals, brushes, packs) cluttered
-the shop and made rare effects purchasable on demand. They're now **repackaged into
-pay-to-spin wheels** — you buy the spin, the wheel decides the prize, one spin per wheel
-per shop (rerolls restock them):
+The wheels proved fun but choiceless, so everything except the Royal Wheel became
+**Balatro-style packs**: pay to open, see the contents, keep exactly one. Each shop
+stocks **two pack slots** drawn from three kinds — repeats possible — and each slot
+rolls **small (3 options)** or **big (5 options, ~35% of slots, pricier)**:
 
-| Wheel | Price | Outcomes (odds) |
+| Pack | Small / Big | Contents |
 |---|---|---|
-| 🔨 **Tinker Wheel** | $3 | Pip Up 35% · Precision Pip 25% · Cull 15% · Duplicate-of-10 15% · **gild jackpot 10%** |
-| 🔮 **Mystic Wheel** | $6 | random seal 45% · crystallize 20% · Bone Pack 20% · cursed bone +$3 pity 10% · **legendary brush jackpot 5%** |
-| 🎴 **Arcana Wheel** | $8 | common charm 55% · uncommon 30% · rare 12% · **LEGENDARY charm 3%** |
-| 👑 **Royal Wheel** | $15, in ~25% of shops | Power Brush 30% · Chameleon Brush 30% · legendary charm 15% · **bust ($5 back) 25%** |
+| 🔨 **Tinker Pack** | $4 / $6 | Workbench coupons: Pip Up, Precision Pip, Cull, Duplicate-of-10, Gild, Crystallize |
+| 🏮 **Seal Pack** | $5 / $8 | A choice of seals, then you pick the domino to carry it. **Obsidian only appears in big packs** |
+| 🎴 **Arcana Pack** | $6 / $10 | Rarity-weighted charms |
 
-If a prize has no valid target (e.g. Cull with a minimum pouch), the house pays out cash
-instead. Materials (Gold pays $1 when played, Crystal doubles joints but may shatter),
-seals (Ruby retrigger / Gold $2 / Azure returns to hand / Amber opening hand), wild ★
-ends and cursed bones all still exist — they're just won, not bought.
+A **third pack slot** appears in ~25% of shops and leans toward big packs; the 🧺
+**Pack Mule voucher** ($10) makes it permanent.
+
+The 👑 **Royal Wheel** ($15, ~25% of shops) survives as the game's one true gamble:
+Power Brush 30% / Chameleon Brush 30% / legendary charm 15% / bust-with-$5 25%. The
+🎰 House Edge legendary now gives packs +1 option and rigs the Royal Wheel's jackpot.
+
+### Seals (reworked)
+
+One per domino, never on legendary dominoes, won from Seal Packs so they're a reliable
+draft resource rather than a lucky spin:
+
+| Seal | Rarity | Effect |
+|---|---|---|
+| 🟡 Gold | common | Pays $2 every time it's played |
+| 🟠 Amber | common | Guaranteed in the opening hand, +8 when played |
+| 🔴 Ruby | uncommon | Joints it touches retrigger their base value |
+| 🔵 Azure | uncommon | Returns to hand after the chain scores |
+| 🖤 **Obsidian** | rare | **BIDMAS breaker**: the + inside its domino becomes ×, multiplying its two neighbouring terms together — `(1\|2)(3🖤4)(5\|6)` reads `1 + 2×3 × 4×5 + 6 = 127` |
+
+Obsidian is the deliberate broken-build enabler: pair it with Ruby retriggers, Crystal
+×2s or Echo Chamber and products explode — but it needs a big Seal Pack roll ($8,
+~1-in-5 shops), the right chain shape, and it dies to The Censor zeroing a factor.
+**Broken should be possible, not cheap.**
+
+### Ouroboros (reworked)
+
+The tail-bite is now a **true joint**: the exposed ends multiply — or **exponentiate if
+either exposed end carries a power brush** — and Crystal, Twin Flame, Deuce/Seven/Sixth
+and Echo Chamber all fire on it. Brushing an exposed end used to be dead value;
+Ouroboros turns it into the chain's biggest term (and Cloud Nine's 99s feed it a
+99×99 = 9,801 loop).
+
+### Pouches & Stakes (the "Decks" and "Stakes")
+
+Progress persists in localStorage. Pouches unlock off your best round cleared anywhere;
+each stake unlocks by clearing round 10 on the previous stake — the climb stays steep.
+
+| Pouch | Unlock | Twist |
+|---|---|---|
+| 👝 Standard | — | Double-six set + 2 bonus bones |
+| 🪙 Gilded | round 4 | 2 gold starters, +$4 — goals +10% |
+| 🦴 Cracked | round 6 | 24 bones (consistent draws) — one fewer discard |
+| 💀 Cursed | round 8 | 4 cursed bones inside, +$8 — Absolute/Grave Robber bait |
+| 💎 Crystal | round 10 | 3 crystal starters — 50% shatter chance |
+
+| Stake | Twist |
+|---|---|
+| ⚪ White Bone | Standard |
+| 🟤 Bronze | Goals +20% |
+| 🥈 Silver | Goals +40%, payout $3 |
+| 🥇 Gold | Goals +60%, payout $3, interest cap −$2 |
+
+### Winning & Endless
+
+Clearing **round 12** completes the run — a 🏆 marks each conquered stake on the menu.
+At that point you choose: **retire victorious**, or **continue endlessly**, where goals
+grow an extra ×1.5 per round (≈×2 compounded) until the pouch finally breaks. Endless
+is where broken builds go to find out exactly how broken they are.
 
 ### Charms currently in the pool (47)
 

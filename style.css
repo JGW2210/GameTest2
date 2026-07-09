@@ -75,6 +75,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .money { color: var(--gold); font-weight: 700; }
 .money.big { font-size: 1.6rem; font-family: var(--font-display); }
 .danger { color: var(--red); }
+.victory { color: var(--gold); text-shadow: 0 0 22px rgba(232,184,75,0.6); animation: legend-glow 1.4s ease-in-out infinite alternate; }
+.victory-sub { color: var(--muted); font-style: italic; text-align: center; }
 
 /* ---------- menu ---------- */
 #screen-menu { align-items: center; justify-content: center; }
@@ -86,8 +88,30 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 }
 .logo span { color: var(--gold); }
 @keyframes logo-in { from { opacity: 0; transform: translateY(-30px) scale(0.9); } }
-.tagline { color: var(--muted); font-style: italic; font-size: 1.15rem; margin-bottom: 0.9rem; }
+.tagline { color: var(--muted); font-style: italic; font-size: 1.15rem; margin-bottom: 0.4rem; }
 .best-round { color: var(--muted); font-size: 0.95rem; }
+
+/* pouch & stake selectors */
+.select-label {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.18em;
+  color: var(--gold); margin-top: 0.3rem;
+}
+.select-row { display: flex; flex-wrap: wrap; gap: 0.45rem; justify-content: center; max-width: 34rem; }
+.select-chip {
+  font-family: var(--font-body); font-weight: 600; font-size: 0.92rem; cursor: pointer;
+  display: flex; align-items: center; gap: 0.4rem;
+  background: linear-gradient(180deg, var(--panel), var(--panel-dark));
+  color: var(--text); border: 1px solid var(--panel-edge); border-radius: 999px;
+  padding: 0.4em 0.95em;
+  transition: transform 0.1s, border-color 0.15s, box-shadow 0.15s;
+}
+.select-chip:hover { transform: translateY(-2px); }
+.select-chip.sel {
+  border-color: var(--gold); box-shadow: 0 0 12px rgba(232,184,75,0.35);
+  background: linear-gradient(180deg, rgba(232,184,75,0.25), rgba(184,137,43,0.18));
+}
+.select-chip.locked { opacity: 0.45; cursor: not-allowed; }
+.menu-desc { color: var(--muted); font-size: 0.92rem; font-style: italic; max-width: 30rem; min-height: 2.4em; }
 
 /* ---------- topbar ---------- */
 .topbar {
@@ -245,6 +269,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .seal-dot.seal-gold { background: radial-gradient(circle at 35% 35%, #ffe08a, #c8921a); }
 .seal-dot.seal-azure { background: radial-gradient(circle at 35% 35%, #8fd0f5, #1c64a8); }
 .seal-dot.seal-amber { background: radial-gradient(circle at 35% 35%, #ffc27a, #c86a12); }
+.seal-dot.seal-obsidian {
+  background: radial-gradient(circle at 35% 35%, #6a5a86, #17121f);
+  box-shadow: 0 0 7px rgba(140,110,200,0.75);
+}
 .domino.mat-gold {
   background:
     linear-gradient(160deg, rgba(255,255,255,0.5), transparent 45%),
@@ -373,6 +401,27 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .shop-item.sold { opacity: 0.42; }
 .shop-foot { display: flex; justify-content: space-between; width: 100%; gap: 0.6rem; flex-wrap: wrap; }
 .owned-charm-row { display: flex; align-items: center; gap: 0.5rem; }
+
+/* ---------- pack / charm choice cards ---------- */
+.charm-card {
+  background: linear-gradient(180deg, rgba(0,0,0,0.24), rgba(0,0,0,0.38));
+  border: 1px solid var(--panel-edge); border-radius: 13px;
+  padding: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem; align-items: center;
+  width: 12.5rem; cursor: pointer; text-align: center;
+  transition: transform 0.13s, border-color 0.13s, box-shadow 0.13s;
+  animation: deal-in 0.3s cubic-bezier(0.22, 1.2, 0.36, 1) backwards;
+}
+.charm-card:nth-child(2) { animation-delay: 70ms; }
+.charm-card:nth-child(3) { animation-delay: 140ms; }
+.charm-card:nth-child(4) { animation-delay: 210ms; }
+.charm-card:nth-child(5) { animation-delay: 280ms; }
+.charm-card:nth-child(6) { animation-delay: 350ms; }
+.charm-card:hover {
+  transform: translateY(-4px); border-color: var(--gold);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.45), 0 0 14px rgba(232,184,75,0.25);
+}
+.charm-card .cc-name { font-weight: 700; font-size: 1.02rem; }
+.charm-card .cc-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
 
 /* ---------- picker ---------- */
 .picker-sub { color: var(--muted); font-size: 0.9rem; text-align: center; }
