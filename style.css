@@ -75,6 +75,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 400; letter-spacing:
 .money { color: var(--gold); font-weight: 700; }
 .money.big { font-size: 1.6rem; font-family: var(--font-display); }
 .danger { color: var(--red); }
+.victory { color: var(--gold); text-shadow: 0 0 22px rgba(232,184,75,0.6); animation: legend-glow 1.4s ease-in-out infinite alternate; }
+.victory-sub { color: var(--muted); font-style: italic; text-align: center; }
 
 /* ---------- menu ---------- */
 #screen-menu { align-items: center; justify-content: center; }

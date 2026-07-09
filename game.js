@@ -127,11 +127,12 @@ function recordRoundCleared(round) {
   saveProgress(p);
 }
 // pouches unlock off your best round anywhere; each stake unlocks by
-// clearing round 8 on the stake before it
+// clearing round 10 on the stake before it — the climb stays steep
+const STAKE_UNLOCK_ROUND = 10;
 function pouchUnlocked(p) { return (loadProgress().bestRound || 0) >= (p.unlock || 0); }
 function stakeUnlocked(idx) {
   if (idx === 0) return true;
-  return ((loadProgress().best || {})[STAKES[idx - 1].id] || 0) >= 8;
+  return ((loadProgress().best || {})[STAKES[idx - 1].id] || 0) >= STAKE_UNLOCK_ROUND;
 }
 
 function startingPouch(pouchDef) {
@@ -287,6 +288,9 @@ const VOUCHERS = [
   { id: 'thumb', icon: '🌱', name: 'Green Thumb', price: 7,
     desc: 'Interest cap raised by $3.',
     can: () => S.interestCap < 14, buy: () => { S.interestCap += 3; } },
+  { id: 'mule', icon: '🧺', name: 'Pack Mule', price: 10,
+    desc: 'The Bazaar permanently stocks a third pack.',
+    can: () => !S.thirdPackSlot, buy: () => { S.thirdPackSlot = true; } },
 ];
 
 /* ---------------- bosses ---------------- */
@@ -321,13 +325,20 @@ function newRun(pouchId = 'standard', stakeId = 'white') {
     playsLeft: 0, discardsLeft: 0, score: 0, goal: 0, boss: null,
     discardMode: false, discardSel: new Set(),
     shop: null, rerollCost: 2,
+    thirdPackSlot: false, // 🧺 Pack Mule voucher
+    endless: false,       // continue past the round-12 victory
   };
   startRound(1);
   showScreen('game');
 }
 
+// clearing this round wins the run; endless mode continues beyond it
+const WIN_ROUND = 12;
+
 function goalFor(round, boss) {
   let g = 60 * Math.pow(1.35, round - 1);
+  // endless: past the victory round, goals go super-exponential
+  if (round > WIN_ROUND) g *= Math.pow(1.5, round - WIN_ROUND);
   g *= (S.stake && S.stake.goalMult) || 1;
   g *= (S.pouchDef && S.pouchDef.goalMult) || 1;
   if (boss && boss.id === 'tithe') g *= 1.25;
@@ -981,10 +992,36 @@ function winRound() {
   totalRow.className = 'row total';
   totalRow.innerHTML = `<span>Wallet</span><span class="money">$${S.money}</span>`;
   bd.appendChild(totalRow);
+
+  // clearing the win round completes the run: celebrate before the Bazaar
+  if (S.round === WIN_ROUND && !S.endless) {
+    const p = loadProgress();
+    p.won = p.won || {};
+    p.won[S.stake.id] = true;
+    saveProgress(p);
+    $('overlay-victory').classList.remove('hidden');
+    return;
+  }
   $('overlay-roundend').classList.remove('hidden');
 }
 
-function gameOver(reason) {
+function continueEndless() {
+  S.endless = true;
+  $('overlay-victory').classList.add('hidden');
+  $('overlay-roundend').classList.remove('hidden');
+  toast('♾️ Endless: goals now grow 50% faster each round');
+}
+
+function retireVictorious() {
+  $('overlay-victory').classList.add('hidden');
+  gameOver('🏆 Retired victorious — the pouch conquered all 12 rounds!', true);
+}
+
+function gameOver(reason, victory = false) {
+  const title = $('go-title');
+  title.textContent = victory ? 'Victory!' : 'Run Over';
+  title.classList.toggle('danger', !victory);
+  title.classList.toggle('victory', victory);
   $('go-stats').innerHTML = `
     <div>${reason}</div>
     <div>${S.pouchDef.icon} ${S.pouchDef.name} Pouch · ${S.stake.icon} ${S.stake.name} Stake</div>
@@ -1044,6 +1081,9 @@ function generateShop() {
     packs: [randPack(), randPack()], // two pack slots, repeats possible
     services: { pip: false, cull: false }, // targeted workbench sold flags
   };
+  // a third pack slot: rare natural stock, permanent with Pack Mule — and
+  // when it shows up it leans toward BIG packs
+  if (S.thirdPackSlot || Math.random() < 0.25) S.shop.packs.push(randPack(true));
 }
 
 /* ---------------- wheels of fortune ----------------
@@ -1165,9 +1205,9 @@ const TINKER_COUPONS = [
   { icon: '💎', name: 'Crystallize', desc: 'Turn a chosen domino crystal', run: wheelCrystallize },
 ];
 
-function randPack() {
+function randPack(bigBias) {
   const kind = pick(Object.keys(PACK_KINDS));
-  const size = Math.random() < 0.35 ? 'big' : 'small';
+  const size = Math.random() < (bigBias ? 0.6 : 0.35) ? 'big' : 'small';
   const [price, picks] = PACK_KINDS[kind][size];
   return { kind, size, price, picks, opened: false };
 }
@@ -1576,11 +1616,12 @@ function renderMenuSelectors() {
   sr.innerHTML = '';
   STAKES.forEach((s, i) => {
     const unlocked = stakeUnlocked(i);
+    const won = (loadProgress().won || {})[s.id];
     const el = document.createElement('button');
     el.className = 'select-chip' + (selStake === s.id ? ' sel' : '') + (unlocked ? '' : ' locked');
-    el.innerHTML = `<span class="chip-icon">${unlocked ? s.icon : '🔒'}</span><span>${s.name}</span>`;
+    el.innerHTML = `<span class="chip-icon">${unlocked ? s.icon : '🔒'}</span><span>${s.name}${won ? ' 🏆' : ''}</span>`;
     el.onclick = () => {
-      if (!unlocked) { toast(`🔒 Clear round 8 on ${STAKES[i - 1].name} to unlock the ${s.name} Stake`); return; }
+      if (!unlocked) { toast(`🔒 Clear round ${STAKE_UNLOCK_ROUND} on ${STAKES[i - 1].name} to unlock the ${s.name} Stake`); return; }
       selStake = s.id;
       localStorage.setItem('chainbone-stake', s.id);
       renderMenuSelectors();
@@ -1607,6 +1648,8 @@ function bind() {
 
   $('btn-to-shop').onclick = openShop;
   $('btn-skip-shop').onclick = applySkipOffer;
+  $('btn-endless').onclick = continueEndless;
+  $('btn-retire').onclick = retireVictorious;
   $('btn-reroll').onclick = rerollShop;
   $('btn-next-round').onclick = () => {
     $('overlay-shop').classList.add('hidden');

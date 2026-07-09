@@ -36,7 +36,7 @@ formula and the deck. Chainbone maps each of those axes onto dominoes:
 | Destroying cards | **Cull** on the workbench (thin the pouch, min 8) | Draw consistency |
 | Buying cards | **Fresh Bones** — 2 dominoes per shop, sometimes gold/crystal/cursed | Deck composition |
 | Everything else | **The Wheels of Fortune** — pay to spin, the wheel picks the prize (see below) | Consolidated RNG economy |
-| Vouchers | **Vouchers**: Long Table (+1 chain slot), Deep Pockets (+1 hand size), Encore (+1 play), Second Wind (+1 discard), Green Thumb (interest cap) | The run's fundamental constraints |
+| Vouchers | **Vouchers**: Long Table (+1 chain slot), Deep Pockets (+1 hand size), Encore (+1 play), Second Wind (+1 discard), Green Thumb (interest cap), Pack Mule (permanent third pack slot) | The run's fundamental constraints |
 | Skip tags | **Skip the Bazaar** — forgo the shop for a rolled tag: +$10, a free charm, or free pip upgrades | Tempo vs. greed |
 | Interest & economy | $1 per $5 held (capped), reroll costs that escalate | Money as a strategy |
 | Boss Blinds | **Bosses** every 3rd round (no flipping / first joint silenced / fewer plays / higher goal), each paying a $4 bounty | Forced adaptation |
@@ -53,6 +53,9 @@ rolls **small (3 options)** or **big (5 options, ~35% of slots, pricier)**:
 | 🔨 **Tinker Pack** | $4 / $6 | Workbench coupons: Pip Up, Precision Pip, Cull, Duplicate-of-10, Gild, Crystallize |
 | 🏮 **Seal Pack** | $5 / $8 | A choice of seals, then you pick the domino to carry it. **Obsidian only appears in big packs** |
 | 🎴 **Arcana Pack** | $6 / $10 | Rarity-weighted charms |
+
+A **third pack slot** appears in ~25% of shops and leans toward big packs; the 🧺
+**Pack Mule voucher** ($10) makes it permanent.
 
 The 👑 **Royal Wheel** ($15, ~25% of shops) survives as the game's one true gamble:
 Power Brush 30% / Chameleon Brush 30% / legendary charm 15% / bust-with-$5 25%. The
@@ -87,7 +90,7 @@ Ouroboros turns it into the chain's biggest term (and Cloud Nine's 99s feed it a
 ### Pouches & Stakes (the "Decks" and "Stakes")
 
 Progress persists in localStorage. Pouches unlock off your best round cleared anywhere;
-each stake unlocks by clearing round 8 on the previous stake.
+each stake unlocks by clearing round 10 on the previous stake — the climb stays steep.
 
 | Pouch | Unlock | Twist |
 |---|---|---|
@@ -103,6 +106,13 @@ each stake unlocks by clearing round 8 on the previous stake.
 | 🟤 Bronze | Goals +20% |
 | 🥈 Silver | Goals +40%, payout $3 |
 | 🥇 Gold | Goals +60%, payout $3, interest cap −$2 |
+
+### Winning & Endless
+
+Clearing **round 12** completes the run — a 🏆 marks each conquered stake on the menu.
+At that point you choose: **retire victorious**, or **continue endlessly**, where goals
+grow an extra ×1.5 per round (≈×2 compounded) until the pouch finally breaks. Endless
+is where broken builds go to find out exactly how broken they are.
 
 ### Charms currently in the pool (47)
 
